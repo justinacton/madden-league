@@ -81,6 +81,15 @@ describe('mock data integrity', () => {
     expect(sam?.seasonsPlayed).toBe(2);
     expect(sam?.currentTeam?.id).toBe('ravens');
     expect(sam?.championships).toBe(1);
+    expect(sam?.championshipAppearances).toBeGreaterThanOrEqual(1);
+    expect(sam?.careerGames).toBe((sam?.careerWins ?? 0) + (sam?.careerLosses ?? 0) + (sam?.careerTies ?? 0));
+  });
+
+  it('has Player Stats rows to derive team/player leaderboards from (no separate Player/Team Stats tables)', () => {
+    expect(mockData.playerStats.length).toBeGreaterThan(0);
+    for (const row of mockData.playerStats) {
+      expect(row.playerName.length).toBeGreaterThan(0);
+    }
   });
 
   it('computes head-to-head record between two managers', () => {

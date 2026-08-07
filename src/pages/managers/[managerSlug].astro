@@ -68,12 +68,28 @@ if (!detail && !unavailable) Astro.response.status = 404;
               <span class="stat-value">{detail.summary.championships}</span>
             </div>
             <div class="stat-card">
-              <span class="stat-label">Runner-Up Finishes</span>
-              <span class="stat-value">{detail.summary.runnerUpFinishes}</span>
+              <span class="stat-label">Championship Appearances</span>
+              <span class="stat-value">{detail.summary.championshipAppearances}</span>
             </div>
             <div class="stat-card">
               <span class="stat-label">Seasons Played</span>
               <span class="stat-value">{detail.summary.seasonsPlayed}</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Career Games</span>
+              <span class="stat-value">{detail.summary.careerGames}</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Career Point Differential</span>
+              <span class="stat-value">{formatSignedNumber(detail.summary.careerPointDifferential)}</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Current Streak</span>
+              <span class="stat-value">{detail.summary.currentStreak}</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Longest Win Streak</span>
+              <span class="stat-value">{detail.summary.longestWinStreak}</span>
             </div>
           </div>
 

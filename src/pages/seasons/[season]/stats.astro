@@ -24,7 +24,7 @@ const params = Astro.url.searchParams;
 
 const category = (params.get('category') ?? 'passing') as
   | 'passing' | 'rushing' | 'receiving' | 'defense' | 'team' | 'manager';
-const defenseCategory = (params.get('sub') ?? 'sacks') as DefenseCategory;
+const defenseCategory = (params.get('sub') ?? 'tackles') as DefenseCategory;
 const managerMode = (params.get('mode') ?? 'season') as 'season' | 'career';
 
 let season = null;
@@ -63,12 +63,12 @@ function tabHref(cat: string): string {
 }
 
 const defenseCategories: { key: DefenseCategory; label: string }[] = [
+  { key: 'tackles', label: 'Tackles' },
   { key: 'sacks', label: 'Sacks' },
   { key: 'interceptions', label: 'Interceptions' },
   { key: 'forcedFumbles', label: 'Forced Fumbles' },
   { key: 'fumbleRecoveries', label: 'Fumble Recoveries' },
   { key: 'defensiveTouchdowns', label: 'Defensive TDs' },
-  { key: 'tackles', label: 'Tackles' },
 ];
 ---
 {!season && !unavailable ? (
@@ -115,11 +115,11 @@ const defenseCategories: { key: DefenseCategory; label: string }[] = [
             <PlayerStatTable
               rows={rushing}
               columns={[
-                { key: 'rushingAttempts', label: 'Att' },
+                { key: 'rushAttempts', label: 'Att' },
                 { key: 'rushingYards', label: 'Yds' },
                 { key: 'yardsPerAttempt', label: 'Y/A', format: (v) => v.toFixed(1) },
                 { key: 'rushingTouchdowns', label: 'TD' },
-                { key: 'longestRush', label: 'Long' },
+                { key: 'longRush', label: 'Long' },
               ]}
             />
           )}
@@ -131,7 +131,7 @@ const defenseCategories: { key: DefenseCategory; label: string }[] = [
                 { key: 'receivingYards', label: 'Yds' },
                 { key: 'yardsPerReception', label: 'Y/R', format: (v) => v.toFixed(1) },
                 { key: 'receivingTouchdowns', label: 'TD' },
-                { key: 'longestReception', label: 'Long' },
+                { key: 'longReception', label: 'Long' },
               ]}
             />
           )}

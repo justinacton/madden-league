@@ -2,10 +2,8 @@ import type { LeagueDataset } from '../types';
 import { teams } from './teams';
 import { managers } from './managers';
 import { seasons, seasonEntries } from './seasons';
-import { players } from './players';
-import { games, teamGameStats, playerGameStats } from './schedule';
+import { games, playerStats } from './schedule';
 import { news } from './news';
-import { powerRankings } from './powerRankings';
 
 export const mockData: LeagueDataset = {
   leagueName: 'PUNT',
@@ -14,9 +12,6 @@ export const mockData: LeagueDataset = {
   teams,
   seasonEntries,
   games,
-  teamGameStats,
-  players,
-  playerGameStats,
+  playerStats,
   news,
-  powerRankings,
 };

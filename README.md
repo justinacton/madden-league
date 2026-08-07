@@ -67,32 +67,47 @@ frontmatter) and is never sent to the browser — there is no client-side JavaSc
 
 ## 4. Setting up Airtable
 
-### 4.1 Create the base and tables
+The base uses exactly **7 tables**: `Managers`, `Teams`, `Seasons`, `Season Entries`, `Games`,
+`Player Stats`, `News`. There is intentionally no separate Players table, Team Game Stats table, or
+Power Rankings table — team-level stats (points, yards, sacks, tackles, turnovers) are calculated live
+from `Games` + `Player Stats`, never entered separately.
 
-Create one Airtable base with these tables (exact names matter — the code looks them up by name):
+### 4.1 Run the setup script
 
-`Seasons`, `Managers`, `Teams`, `Season Entries`, `Games`, `Team Game Stats`, `Players`,
-`Player Game Stats`, `News`, `Power Rankings`.
+1. Create a new, empty Airtable base.
+2. Open it, then **Extensions** (left sidebar) → **+ Add an extension** → **Scripting**.
+3. Open [`airtable/setup.js`](airtable/setup.js) from this repo, copy its entire contents, paste them
+   into the Scripting editor (replacing the sample code), and click **Run**.
+4. Read the checklist it prints at the end. Airtable's scripting API can create every field type
+   *except* Formula and Lookup fields, so the script creates everything it can and then tells you
+   exactly which few fields to add by hand (with the formula to use for each). **The site works
+   immediately without doing that** — it falls back to Airtable's own record ID in URLs until you add
+   the friendly ID formulas; adding them later just makes URLs like `/teams/chiefs` instead of
+   `/teams/recXXXXXXXXXXXXXX`.
+5. The script is safe to re-run any time (e.g. after adding a field manually, or if you want to
+   double-check nothing is missing) — it skips anything that already exists and never deletes data.
 
-Field names must match what's read by `src/lib/airtableTransform.ts` exactly — the full field list for
-every table, including types and which are required, is specified in the original product
-requirements doc for this project. A few load-bearing conventions:
+No Airtable token, base ID, or Cloudflare credential is needed to run the script — it runs inside
+Airtable itself with implicit access to the base you have open.
 
-- Every table has a stable "X ID" field (e.g. `Season ID`, `Team ID`) — a short slug-style text value
-  like `season-01` or `chiefs`. This is the ID used in the website's URLs, so treat it as permanent
-  once a record is public.
+### 4.2 Load-bearing conventions
+
+- Every table has a stable "X ID"/"Slug" field (Formula type, added manually per the checklist above)
+  — a short slug-style value like `season-01` or `chiefs`, used directly in the website's URLs.
 - `Season Entries` is the join table between a `Manager`, a `Team`, and a `Season` — this is what lets
   a manager change teams between seasons while keeping their career record intact. There should only
   ever be one Season Entry per manager per season, and one per team per season.
-- `Games`, `Team Game Stats`, and `Player Game Stats` all link back to a `Season Entry` (not directly
-  to a Manager or Team) for the same reason: a historical game's manager/team pairing must never
-  change just because that manager moved to a different team later.
+- `Games` link to two `Season Entries` (`Home Entry`/`Away Entry`), not directly to a Manager or Team,
+  for the same reason: a historical game's manager/team pairing must never change just because that
+  manager moved to a different team later. `Player Stats` link to a `Game` and a `Season Entry`.
+- There's no separate Players table — `Player Stats.Player Name` is just plain text (the Madden roster
+  name). Use the same spelling for a player all season so their stats aggregate together correctly;
+  the site normalizes case and whitespace, but not typos.
 - Only `Seasons.Public` = checked seasons appear on the website at all — use this to stage a season
   before announcing it.
 - Only `News.Status` = `Published` articles appear on the website.
-- Only `Power Rankings.Published` = checked rankings appear.
 
-### 4.2 Create a read-only Personal Access Token
+### 4.3 Create a read-only Personal Access Token
 
 1. In Airtable, go to **Account → Developer Hub → Personal access tokens → Create new token**.
 2. Name it something like `madden-league-website-readonly`.
@@ -102,7 +117,7 @@ requirements doc for this project. A few load-bearing conventions:
 6. Put it in `.env` as `AIRTABLE_TOKEN` for local development, and as a Cloudflare Pages secret (see
    below) for production. Never commit it.
 
-### 4.3 Switch the site over to Airtable
+### 4.4 Switch the site over to Airtable
 
 Set `USE_MOCK_DATA=false` (or remove it) once `AIRTABLE_TOKEN` and `AIRTABLE_BASE_ID` are set — the
 site automatically falls back to mock data if either is missing, so this is safe to leave unset while
@@ -178,19 +193,22 @@ across the change.
 
 ### Enter game statistics
 
-After a game is marked `Final`:
+There is no separate team-stats step — team totals (points, offense/passing/rushing yards, sacks,
+tackles, turnovers) are calculated live from `Games` and `Player Stats`, so entering player stats is
+the only data-entry step:
 
-1. Add **two** `Team Game Stats` records (one per team), each linked to the `Game` and the correct
-   `Season Entry`. At minimum, fill in `Points`, `Total Offense Yards`, `Passing Yards`,
-   `Rushing Yards`, `Turnovers`, and `Defensive Sacks` — these are what standings, rankings, and the
-   Team Stats leaderboard are built from.
-2. Add one `Player Game Stats` record per statistical performance worth tracking (passing, rushing,
-   receiving, or defensive), linked to the `Game`, the `Player`, and the correct `Season Entry`. Only
-   fill in the fields that apply to that performance — leave the rest blank.
-3. To avoid an inaccurate season leaderboard, don't rely only on screenshots of each team's single top
-   performer — a player who's the *second*-best performer in several games can still lead the season
-   in cumulative stats. Capture stats for every player worth tracking each week.
-4. Changes appear on the live site within 5 minutes (the cache TTL), or immediately with
+1. After a game is marked `Final`, add one `Player Stats` record per statistical performance worth
+   tracking (passing, rushing, receiving, and/or defensive stats can all live on the same record for a
+   player who did more than one thing), linked to the `Game` and the correct `Season Entry`. Type the
+   `Player Name` exactly the same way each time it comes up this season — the site groups stats by
+   name (trimmed, case-insensitive), so inconsistent spelling splits one player into two. Only fill in
+   the fields that apply to that performance — leave the rest blank.
+2. Both quarterbacks should get a record, along with any player with meaningful rushing attempts,
+   receptions, or defensive production. To avoid an inaccurate season leaderboard, don't rely only on
+   screenshots of each team's single top performer — a player who's the *second*-best performer in
+   several games can still lead the season in cumulative stats. Capture enough defensive players that
+   `Tackles` totals are actually representative, since that's a full leaderboard category on the site.
+3. Changes appear on the live site within 5 minutes (the cache TTL), or immediately with
    `?bypassCache=1`.
 
 ### Update the static Rules page
@@ -208,7 +226,7 @@ the placeholder text once a rule is finalized rather than deleting the section.
 - **A page shows old data after an Airtable edit:** expected for up to 5 minutes; add
   `?bypassCache=1` to the URL to confirm the edit actually saved, or just wait out the cache window.
 - **"No stats available" / "No games have been scheduled" messages:** this is the expected empty state,
-  not an error — it means the relevant Airtable records don't exist yet (e.g. no `Team Game Stats` rows
+  not an error — it means the relevant Airtable records don't exist yet (e.g. no `Player Stats` rows
   for a completed game).
 - **A season/team/manager/news page 404s:** the slug in the URL doesn't match any public record's
   `Slug` (or the season's `Season ID`). Double check `Public` is checked on the `Seasons` record, and
@@ -254,6 +272,7 @@ src/
   content/rules.ts   Static Rules page content
 tests/               Vitest suite
 public/              Static assets (team/league logo placeholders, robots.txt)
+airtable/setup.js    Airtable Scripting Extension: provisions the 7-table base (see §4.1)
 ```
 
 Note on architecture: the product spec's suggested layout puts the JSON API in a separate

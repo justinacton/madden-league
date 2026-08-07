@@ -99,18 +99,25 @@ try {
               href={`/seasons/${dashboard.season.id}/stats?category=receiving`}
             />
             <LeaderCard
+              label="Tackles Leader"
+              value={dashboard.tacklesLeader ? `${dashboard.tacklesLeader.tackles} tkl` : undefined}
+              meta={dashboard.tacklesLeader ? `${dashboard.tacklesLeader.playerName} · ${dashboard.tacklesLeader.team.abbreviation}` : undefined}
+              logoUrl={dashboard.tacklesLeader?.team.logoUrl}
+              href={`/seasons/${dashboard.season.id}/stats?category=defense&sub=tackles`}
+            />
+            <LeaderCard
               label="Sack Leader"
               value={dashboard.sackLeader ? `${dashboard.sackLeader.sacks} sacks` : undefined}
               meta={dashboard.sackLeader ? `${dashboard.sackLeader.playerName} · ${dashboard.sackLeader.team.abbreviation}` : undefined}
               logoUrl={dashboard.sackLeader?.team.logoUrl}
-              href={`/seasons/${dashboard.season.id}/stats?category=defense`}
+              href={`/seasons/${dashboard.season.id}/stats?category=defense&sub=sacks`}
             />
             <LeaderCard
               label="Interception Leader"
               value={dashboard.interceptionLeader ? `${dashboard.interceptionLeader.interceptions} INT` : undefined}
               meta={dashboard.interceptionLeader ? `${dashboard.interceptionLeader.playerName} · ${dashboard.interceptionLeader.team.abbreviation}` : undefined}
               logoUrl={dashboard.interceptionLeader?.team.logoUrl}
-              href={`/seasons/${dashboard.season.id}/stats?category=defense`}
+              href={`/seasons/${dashboard.season.id}/stats?category=defense&sub=interceptions`}
             />
           </div>
         </div>
@@ -185,6 +192,14 @@ try {
               )}
             </div>
             <div class="card">
+              <h4>Tackles</h4>
+              {dashboard.leagueLeaders.tackles.length === 0 ? <p>No stats available.</p> : (
+                <ol class="mt-0">
+                  {dashboard.leagueLeaders.tackles.map((p) => <li>{p.playerName} — {p.tackles} tkl</li>)}
+                </ol>
+              )}
+            </div>
+            <div class="card">
               <h4>Sacks</h4>
               {dashboard.leagueLeaders.sacks.length === 0 ? <p>No stats available.</p> : (
                 <ol class="mt-0">
@@ -206,56 +221,15 @@ try {
 
       <section class="page-section">
         <div class="container">
-          <div class="grid grid-2">
-            <div>
-              <div class="section-heading">
-                <h2>Latest News</h2>
-                <a href="/news">All news &rarr;</a>
-              </div>
-              {dashboard.news.length === 0 ? <p class="empty-state">No news articles have been published yet.</p> : (
-                <div class="stack">
-                  {dashboard.news.map((article) => <NewsCard article={article} />)}
-                </div>
-              )}
-            </div>
-            <div>
-              <div class="section-heading"><h2>Power Rankings</h2></div>
-              {dashboard.powerRankings.length === 0 ? <p class="empty-state">No power rankings have been published yet.</p> : (
-                <div class="table-scroll">
-                  <table class="data-table responsive-cards">
-                    <thead>
-                      <tr>
-                        <th scope="col">Rank</th>
-                        <th scope="col" class="team-cell">Team</th>
-                        <th scope="col">Move</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {dashboard.powerRankings.map((ranking) => {
-                        const movement = ranking.previousRank !== undefined ? ranking.previousRank - ranking.rank : 0;
-                        return (
-                          <tr>
-                            <td data-label="Rank">{ranking.rank}</td>
-                            <td data-label="Team" class="team-cell">
-                              <a class="team-link" href={`/teams/${ranking.team.slug}`}>
-                                <img class="team-logo-sm" src={ranking.team.logoUrl} alt="" loading="lazy" />
-                                {ranking.team.name}
-                              </a>
-                            </td>
-                            <td data-label="Move">
-                              {movement > 0 && <span>&#9650; {movement}</span>}
-                              {movement < 0 && <span>&#9660; {Math.abs(movement)}</span>}
-                              {movement === 0 && <span>&mdash; No change</span>}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+          <div class="section-heading">
+            <h2>Latest News</h2>
+            <a href="/news">All news &rarr;</a>
           </div>
+          {dashboard.news.length === 0 ? <p class="empty-state">No news articles have been published yet.</p> : (
+            <div class="grid grid-3">
+              {dashboard.news.map((article) => <NewsCard article={article} />)}
+            </div>
+          )}
         </div>
       </section>
     </>

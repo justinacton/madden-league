@@ -8,15 +8,12 @@ import type {
   Manager,
   NewsArticle,
   NewsStatus,
-  Player,
-  PlayerGameStats,
   PlayerPosition,
-  PowerRanking,
+  PlayerStats,
   Season,
   SeasonEntry,
   SeasonStatus,
   Team,
-  TeamGameStats,
 } from './types';
 import { AIRTABLE_TABLES, listAllRecords, type AirtableRecord } from './airtable';
 import type { Env } from './env';
@@ -43,6 +40,13 @@ function bool(value: unknown): boolean {
   return value === true;
 }
 
+/** A table's own stable "X ID" field, accepting either a text/formula field or an autoNumber field. */
+function friendlyId(value: unknown): string | undefined {
+  if (typeof value === 'string' && value.length > 0) return value;
+  if (typeof value === 'number') return String(value);
+  return undefined;
+}
+
 /** First linked-record ID from an Airtable link field, or undefined. */
 function firstLink(value: unknown): string | undefined {
   if (Array.isArray(value) && typeof value[0] === 'string') return value[0];
@@ -66,8 +70,8 @@ function buildFriendlyIdMap<F extends Record<string, unknown>>(
 ): Map<string, string> {
   const map = new Map<string, string>();
   for (const record of records) {
-    const friendlyId = str(record.fields[idFieldName]) ?? record.id;
-    map.set(record.id, friendlyId);
+    const id = friendlyId(record.fields[idFieldName]) ?? record.id;
+    map.set(record.id, id);
   }
   return map;
 }
@@ -79,55 +83,56 @@ function resolve(map: Map<string, string>, recordId: string | undefined): string
 
 // ---------------------------------------------------------------------------
 // Per-table transforms
+//
+// Note on lookups: the spec's "create a lookup field for X" instructions are
+// for the commissioner's own convenience browsing Airtable — this transform
+// layer never reads them. Instead it resolves Team/Manager for a Game or
+// Player Stats row itself, in two hops through the linked Season Entry
+// (Home/Away Entry -> Season Entry -> Team/Manager). That means none of
+// those lookup fields are required for the site to work.
 // ---------------------------------------------------------------------------
 
-function transformSeason(
-  record: AirtableRecord,
-  ids: { managers: Map<string, string>; teams: Map<string, string> }
-): Season {
+function transformSeason(record: AirtableRecord, ids: { managers: Map<string, string> }): Season {
   const f = record.fields;
   return {
-    id: str(f['Season ID']) ?? record.id,
+    id: friendlyId(f['SeasonID']) ?? record.id,
     name: str(f['Name']) ?? 'Untitled Season',
-    maddenVersion: str(f['Madden Version']),
-    startDate: str(f['Start Date']),
-    endDate: str(f['End Date']),
+    maddenVersion: str(f['MaddenVersion']),
+    startDate: str(f['StartDate']),
+    endDate: str(f['EndDate']),
     status: (str(f['Status']) as SeasonStatus) ?? 'Upcoming',
-    currentWeek: num(f['Current Week']),
-    regularSeasonWeeks: num(f['Regular Season Weeks']),
-    championManagerId: resolve(ids.managers, firstLink(f['Champion Manager'])),
-    championTeamId: resolve(ids.teams, firstLink(f['Champion Team'])),
-    runnerUpManagerId: resolve(ids.managers, firstLink(f['Runner-Up Manager'])),
-    runnerUpTeamId: resolve(ids.teams, firstLink(f['Runner-Up Team'])),
+    currentWeek: num(f['CurrentWeek']),
+    regularSeasonWeeks: num(f['RegularSeasonWeeks']),
+    championManagerId: resolve(ids.managers, firstLink(f['Champion'])),
+    runnerUpManagerId: resolve(ids.managers, firstLink(f['RunnerUp'])),
     public: bool(f['Public']),
   };
 }
 
-function transformManager(record: AirtableRecord, ids: { seasons: Map<string, string> }): Manager {
+function transformManager(record: AirtableRecord): Manager {
   const f = record.fields;
   return {
-    id: str(f['Manager ID']) ?? record.id,
-    displayName: str(f['Display Name']) ?? 'Unnamed Manager',
+    id: friendlyId(f['ManagerID']) ?? record.id,
+    displayName: str(f['Name']) ?? 'Unnamed Manager',
     slug: str(f['Slug']) ?? record.id,
     active: bool(f['Active']),
-    profileImageUrl: resolveImageUrl(f['Profile Image']),
+    profileImageUrl: resolveImageUrl(f['Photo']),
     bio: str(f['Bio']),
-    joinedSeasonId: resolve(ids.seasons, firstLink(f['Joined Season'])),
   };
 }
 
 function transformTeam(record: AirtableRecord): Team {
   const f = record.fields;
   return {
-    id: str(f['Team ID']) ?? record.id,
+    id: friendlyId(f['TeamID']) ?? record.id,
     city: str(f['City']) ?? '',
-    teamName: str(f['Team Name']) ?? '',
+    teamName: str(f['TeamName']) ?? '',
     abbreviation: str(f['Abbreviation']) ?? '',
     slug: str(f['Slug']) ?? record.id,
     conference: str(f['Conference']) as Conference | undefined,
     division: str(f['Division']),
-    primaryColor: str(f['Primary Color']),
-    secondaryColor: str(f['Secondary Color']),
+    primaryColor: str(f['PrimaryColor']),
+    secondaryColor: str(f['SecondaryColor']),
     logoUrl: resolveImageUrl(f['Logo']) ?? '/images/teams/placeholder.svg',
     active: bool(f['Active']),
   };
@@ -139,57 +144,19 @@ function transformSeasonEntry(
 ): SeasonEntry {
   const f = record.fields;
   return {
-    id: str(f['Season Entry ID']) ?? record.id,
+    id: friendlyId(f['Entry ID']) ?? record.id,
     seasonId: resolve(ids.seasons, firstLink(f['Season'])) ?? '',
     managerId: resolve(ids.managers, firstLink(f['Manager'])) ?? '',
     teamId: resolve(ids.teams, firstLink(f['Team'])) ?? '',
-    activeEntry: bool(f['Active Entry']),
-    conference: str(f['Conference']) as Conference | undefined,
-    division: str(f['Division']),
-    playoffSeed: num(f['Playoff Seed']),
-    finalFinish: str(f['Final Finish']) as FinalFinish | undefined,
+    activeEntry: bool(f['Active']),
+    playoffSeed: num(f['PlayoffSeed']),
+    finalFinish: str(f['FinalFinish']) as FinalFinish | undefined,
   };
 }
 
-function transformGame(
-  record: AirtableRecord,
-  ids: {
-    seasons: Map<string, string>;
-    seasonEntries: Map<string, string>;
-    teams: Map<string, string>;
-    managers: Map<string, string>;
-  }
-): Game {
-  const f = record.fields;
-  const homeSeasonEntryId = resolve(ids.seasonEntries, firstLink(f['Home Season Entry'])) ?? '';
-  const awaySeasonEntryId = resolve(ids.seasonEntries, firstLink(f['Away Season Entry'])) ?? '';
-  return {
-    id: str(f['Game ID']) ?? record.id,
-    seasonId: resolve(ids.seasons, firstLink(f['Season'])) ?? '',
-    week: num(f['Week']) ?? 0,
-    gameDate: str(f['Game Date']),
-    gameType: (str(f['Game Type']) as GameType) ?? 'Regular Season',
-    status: (str(f['Status']) as GameStatus) ?? 'Scheduled',
-    homeSeasonEntryId,
-    awaySeasonEntryId,
-    homeTeamId: resolve(ids.teams, firstLink(f['Home Team'])) ?? '',
-    awayTeamId: resolve(ids.teams, firstLink(f['Away Team'])) ?? '',
-    homeManagerId: resolve(ids.managers, firstLink(f['Home Manager'])) ?? '',
-    awayManagerId: resolve(ids.managers, firstLink(f['Away Manager'])) ?? '',
-    homeScore: num(f['Home Score']),
-    awayScore: num(f['Away Score']),
-    winnerManagerId: resolve(ids.managers, firstLink(f['Winner Manager'])),
-    winnerTeamId: resolve(ids.teams, firstLink(f['Winner Team'])),
-    losingManagerId: resolve(ids.managers, firstLink(f['Losing Manager'])),
-    losingTeamId: resolve(ids.teams, firstLink(f['Losing Team'])),
-    isTie: bool(f['Is Tie']),
-    overtime: bool(f['Overtime']),
-    recap: str(f['Recap']),
-    featuredGame: bool(f['Featured Game']),
-    // Screenshot Folder URL is intentionally never surfaced — internal commissioner reference only.
-    publicNotes: str(f['Public Notes']),
-    lastUpdated: str(f['Last Updated']),
-  };
+interface SeasonEntryInfo {
+  teamId: string;
+  managerId: string;
 }
 
 interface GameInfo {
@@ -197,143 +164,104 @@ interface GameInfo {
   week: number;
 }
 
-function transformTeamGameStats(
+function transformGame(
   record: AirtableRecord,
-  ids: {
-    games: Map<string, string>;
-    seasonEntries: Map<string, string>;
-    teams: Map<string, string>;
-    managers: Map<string, string>;
-    gameInfoByFriendlyId: Map<string, GameInfo>;
-  }
-): TeamGameStats {
+  ids: { seasons: Map<string, string>; seasonEntries: Map<string, string> },
+  seasonEntryInfoByFriendlyId: Map<string, SeasonEntryInfo>
+): Game {
   const f = record.fields;
-  const gameId = resolve(ids.games, firstLink(f['Game'])) ?? '';
-  const gameInfo = ids.gameInfoByFriendlyId.get(gameId);
+  const homeSeasonEntryId = resolve(ids.seasonEntries, firstLink(f['HomeEntry'])) ?? '';
+  const awaySeasonEntryId = resolve(ids.seasonEntries, firstLink(f['AwayEntry'])) ?? '';
+  const homeInfo = seasonEntryInfoByFriendlyId.get(homeSeasonEntryId);
+  const awayInfo = seasonEntryInfoByFriendlyId.get(awaySeasonEntryId);
+
   return {
-    id: str(f['Team Game Stat ID']) ?? record.id,
-    gameId,
-    // Season/Week are lookups through Game in Airtable; derive them from the
-    // already-resolved Game record instead of re-parsing the lookup shape.
-    seasonId: gameInfo?.seasonId ?? '',
-    week: gameInfo?.week ?? 0,
-    seasonEntryId: resolve(ids.seasonEntries, firstLink(f['Season Entry'])) ?? '',
-    teamId: resolve(ids.teams, firstLink(f['Team'])) ?? '',
-    managerId: resolve(ids.managers, firstLink(f['Manager'])) ?? '',
-    points: num(f['Points']) ?? 0,
-    totalOffenseYards: num(f['Total Offense Yards']),
-    passingYards: num(f['Passing Yards']),
-    rushingYards: num(f['Rushing Yards']),
-    firstDowns: num(f['First Downs']),
-    turnovers: num(f['Turnovers']),
-    takeaways: num(f['Takeaways']),
-    sacksAllowed: num(f['Sacks Allowed']),
-    defensiveSacks: num(f['Defensive Sacks']),
-    thirdDownMade: num(f['Third Down Made']),
-    thirdDownAttempts: num(f['Third Down Attempts']),
-    redZoneTDs: num(f['Red Zone TDs']),
-    redZoneAttempts: num(f['Red Zone Attempts']),
+    id: friendlyId(f['GameID']) ?? record.id,
+    seasonId: resolve(ids.seasons, firstLink(f['Season'])) ?? '',
+    week: num(f['Week']) ?? 0,
+    gameDate: str(f['GameDate']),
+    gameType: (str(f['GameType']) as GameType) ?? 'Regular Season',
+    status: (str(f['Status']) as GameStatus) ?? 'Scheduled',
+    homeSeasonEntryId,
+    awaySeasonEntryId,
+    homeTeamId: homeInfo?.teamId ?? '',
+    awayTeamId: awayInfo?.teamId ?? '',
+    homeManagerId: homeInfo?.managerId ?? '',
+    awayManagerId: awayInfo?.managerId ?? '',
+    homeScore: num(f['HomeScore']),
+    awayScore: num(f['AwayScore']),
+    overtime: bool(f['Overtime']),
+    recap: str(f['Recap']),
+    featuredGame: bool(f['FeaturedGame']),
   };
 }
 
-function transformPlayer(record: AirtableRecord, ids: { teams: Map<string, string> }): Player {
-  const f = record.fields;
-  return {
-    id: str(f['Player ID']) ?? record.id,
-    fullName: str(f['Full Name']) ?? 'Unnamed Player',
-    slug: str(f['Slug']) ?? record.id,
-    position: (str(f['Position']) as PlayerPosition) ?? 'WR',
-    nflTeamId: resolve(ids.teams, firstLink(f['NFL Team'])) ?? '',
-    active: bool(f['Active']),
-    headshotUrl: resolveImageUrl(f['Headshot']),
-    sortName: str(f['Sort Name']),
-  };
-}
-
-function transformPlayerGameStats(
+function transformPlayerStats(
   record: AirtableRecord,
-  ids: {
-    games: Map<string, string>;
-    players: Map<string, string>;
-    seasonEntries: Map<string, string>;
-    teams: Map<string, string>;
-    managers: Map<string, string>;
-    gameInfoByFriendlyId: Map<string, GameInfo>;
-  }
-): PlayerGameStats {
+  ids: { games: Map<string, string>; seasonEntries: Map<string, string> },
+  gameInfoByFriendlyId: Map<string, GameInfo>,
+  seasonEntryInfoByFriendlyId: Map<string, SeasonEntryInfo>
+): PlayerStats {
   const f = record.fields;
   const gameId = resolve(ids.games, firstLink(f['Game'])) ?? '';
-  const gameInfo = ids.gameInfoByFriendlyId.get(gameId);
+  const gameInfo = gameInfoByFriendlyId.get(gameId);
+  // This base's Player Stats table uses no-space field names (PlayerName,
+  // PassingTD, ...) rather than the spec's spaced names — matched here as-is
+  // rather than renaming ~19 live fields in Airtable.
+  const seasonEntryId = resolve(ids.seasonEntries, firstLink(f['SeasonEntry'])) ?? '';
+  const entryInfo = seasonEntryInfoByFriendlyId.get(seasonEntryId);
+
   return {
-    id: str(f['Player Game Stat ID']) ?? record.id,
+    // No dedicated ID formula field for this table in the spec — the raw
+    // Airtable record ID is unique and stable enough on its own.
+    id: record.id,
     gameId,
     seasonId: gameInfo?.seasonId ?? '',
     week: gameInfo?.week ?? 0,
-    playerId: resolve(ids.players, firstLink(f['Player'])) ?? '',
-    position: (str(f['Position']) as PlayerPosition) ?? 'WR',
-    seasonEntryId: resolve(ids.seasonEntries, firstLink(f['Season Entry'])) ?? '',
-    teamId: resolve(ids.teams, firstLink(f['Team'])) ?? '',
-    managerId: resolve(ids.managers, firstLink(f['Manager'])) ?? '',
-    gamesPlayedValue: num(f['Games Played Value']) ?? 1,
-    passCompletions: num(f['Pass Completions']),
-    passAttempts: num(f['Pass Attempts']),
-    passingYards: num(f['Passing Yards']),
-    passingTouchdowns: num(f['Passing Touchdowns']),
-    interceptionsThrown: num(f['Interceptions Thrown']),
-    sacksTaken: num(f['Sacks Taken']),
-    passerRating: num(f['Passer Rating']),
-    rushingAttempts: num(f['Rushing Attempts']),
-    rushingYards: num(f['Rushing Yards']),
-    rushingTouchdowns: num(f['Rushing Touchdowns']),
-    longestRush: num(f['Longest Rush']),
-    fumbles: num(f['Fumbles']),
+    seasonEntryId,
+    teamId: entryInfo?.teamId ?? '',
+    managerId: entryInfo?.managerId ?? '',
+    playerName: str(f['PlayerName']) ?? 'Unknown Player',
+    position: (str(f['Position']) as PlayerPosition) ?? 'OTHER',
+    passCompletions: num(f['PassCompletions']),
+    passAttempts: num(f['PassAttempts']),
+    passingYards: num(f['PassingYards']),
+    passingTouchdowns: num(f['PassingTD']),
+    interceptionsThrown: num(f['InterceptionsThrown']),
+    rushAttempts: num(f['RushAttempts']),
+    rushingYards: num(f['RushingYards']),
+    rushingTouchdowns: num(f['RushingTD']),
+    longRush: num(f['LongRush']),
     receptions: num(f['Receptions']),
-    receivingYards: num(f['Receiving Yards']),
-    receivingTouchdowns: num(f['Receiving Touchdowns']),
-    longestReception: num(f['Longest Reception']),
-    drops: num(f['Drops']),
+    receivingYards: num(f['ReceivingYards']),
+    receivingTouchdowns: num(f['ReceivingTD']),
+    longReception: num(f['LongReception']),
     tackles: num(f['Tackles']),
-    tacklesForLoss: num(f['Tackles for Loss']),
     sacks: num(f['Sacks']),
     interceptions: num(f['Interceptions']),
-    forcedFumbles: num(f['Forced Fumbles']),
-    fumbleRecoveries: num(f['Fumble Recoveries']),
-    defensiveTouchdowns: num(f['Defensive Touchdowns']),
+    forcedFumbles: num(f['ForcedFumbles']),
+    fumbleRecoveries: num(f['FumbleRecoveries']),
+    defensiveTouchdowns: num(f['DefensiveTD']),
+    fumbles: num(f['Fumbles']),
+    fumblesLost: num(f['FumblesLost']),
   };
 }
 
 function transformNews(record: AirtableRecord, ids: { seasons: Map<string, string> }): NewsArticle {
   const f = record.fields;
   return {
-    id: str(f['News ID']) ?? record.id,
+    id: friendlyId(f['News ID']) ?? record.id,
     title: str(f['Title']) ?? 'Untitled',
     slug: str(f['Slug']) ?? record.id,
-    publishDate: str(f['Publish Date']) ?? new Date(0).toISOString(),
+    publishDate: str(f['PublishDate']) ?? new Date(0).toISOString(),
     status: (str(f['Status']) as NewsStatus) ?? 'Draft',
     summary: str(f['Summary']) ?? '',
     body: str(f['Body']) ?? '',
-    featuredImageUrl: resolveImageUrl(f['Featured Image']),
+    featuredImageUrl: resolveImageUrl(f['FeaturedImage']),
     seasonId: resolve(ids.seasons, firstLink(f['Season'])),
     week: num(f['Week']),
     featured: bool(f['Featured']),
     author: str(f['Author']),
-  };
-}
-
-function transformPowerRanking(
-  record: AirtableRecord,
-  ids: { seasons: Map<string, string>; seasonEntries: Map<string, string> }
-): PowerRanking {
-  const f = record.fields;
-  return {
-    id: str(f['Ranking ID']) ?? record.id,
-    seasonId: resolve(ids.seasons, firstLink(f['Season'])) ?? '',
-    week: num(f['Week']) ?? 0,
-    rank: num(f['Rank']) ?? 0,
-    previousRank: num(f['Previous Rank']),
-    seasonEntryId: resolve(ids.seasonEntries, firstLink(f['Season Entry'])) ?? '',
-    commentary: str(f['Commentary']),
-    published: bool(f['Published']),
   };
 }
 
@@ -342,85 +270,59 @@ function transformPowerRanking(
 // ---------------------------------------------------------------------------
 
 export async function fetchLeagueDatasetFromAirtable(env: Env): Promise<LeagueDataset> {
-  const [
-    rawSeasons,
-    rawManagers,
-    rawTeams,
-    rawSeasonEntries,
-    rawGames,
-    rawTeamGameStats,
-    rawPlayers,
-    rawPlayerGameStats,
-    rawNews,
-    rawPowerRankings,
-  ] = await Promise.all([
-    listAllRecords(env, AIRTABLE_TABLES.seasons),
-    listAllRecords(env, AIRTABLE_TABLES.managers),
-    listAllRecords(env, AIRTABLE_TABLES.teams),
-    listAllRecords(env, AIRTABLE_TABLES.seasonEntries),
-    listAllRecords(env, AIRTABLE_TABLES.games),
-    listAllRecords(env, AIRTABLE_TABLES.teamGameStats),
-    listAllRecords(env, AIRTABLE_TABLES.players),
-    listAllRecords(env, AIRTABLE_TABLES.playerGameStats),
-    listAllRecords(env, AIRTABLE_TABLES.news),
-    listAllRecords(env, AIRTABLE_TABLES.powerRankings),
-  ]);
+  const [rawSeasons, rawManagers, rawTeams, rawSeasonEntries, rawGames, rawPlayerStats, rawNews] =
+    await Promise.all([
+      listAllRecords(env, AIRTABLE_TABLES.seasons),
+      listAllRecords(env, AIRTABLE_TABLES.managers),
+      listAllRecords(env, AIRTABLE_TABLES.teams),
+      listAllRecords(env, AIRTABLE_TABLES.seasonEntries),
+      listAllRecords(env, AIRTABLE_TABLES.games),
+      listAllRecords(env, AIRTABLE_TABLES.playerStats),
+      listAllRecords(env, AIRTABLE_TABLES.news),
+    ]);
 
-  const seasonIds = buildFriendlyIdMap(rawSeasons, 'Season ID');
-  const managerIds = buildFriendlyIdMap(rawManagers, 'Manager ID');
-  const teamIds = buildFriendlyIdMap(rawTeams, 'Team ID');
-  const seasonEntryIds = buildFriendlyIdMap(rawSeasonEntries, 'Season Entry ID');
-  const gameIds = buildFriendlyIdMap(rawGames, 'Game ID');
-  const playerIds = buildFriendlyIdMap(rawPlayers, 'Player ID');
+  const managerIds = buildFriendlyIdMap(rawManagers, 'ManagerID');
+  const teamIds = buildFriendlyIdMap(rawTeams, 'TeamID');
+  const seasonIds = buildFriendlyIdMap(rawSeasons, 'SeasonID');
+  const seasonEntryIds = buildFriendlyIdMap(rawSeasonEntries, 'Entry ID');
+  const gameIds = buildFriendlyIdMap(rawGames, 'GameID');
 
-  const seasons = rawSeasons
-    .map((r) => transformSeason(r, { managers: managerIds, teams: teamIds }))
-    .filter((season) => season.public);
+  const seasons = rawSeasons.map((r) => transformSeason(r, { managers: managerIds })).filter((s) => s.public);
   const publicSeasonIds = new Set(seasons.map((s) => s.id));
 
-  const managers = rawManagers.map((r) => transformManager(r, { seasons: seasonIds }));
+  const managers = rawManagers.map((r) => transformManager(r));
   const teams = rawTeams.map((r) => transformTeam(r));
+
   const seasonEntries = rawSeasonEntries
     .map((r) => transformSeasonEntry(r, { seasons: seasonIds, managers: managerIds, teams: teamIds }))
     .filter((entry) => publicSeasonIds.has(entry.seasonId));
+
+  const seasonEntryInfoByFriendlyId = new Map<string, SeasonEntryInfo>(
+    seasonEntries.map((entry) => [entry.id, { teamId: entry.teamId, managerId: entry.managerId }])
+  );
+
   const games = rawGames
-    .map((r) => transformGame(r, { seasons: seasonIds, seasonEntries: seasonEntryIds, teams: teamIds, managers: managerIds }))
+    .map((r) => transformGame(r, { seasons: seasonIds, seasonEntries: seasonEntryIds }, seasonEntryInfoByFriendlyId))
     .filter((game) => publicSeasonIds.has(game.seasonId));
 
   const gameInfoByFriendlyId = new Map<string, GameInfo>(
     games.map((game) => [game.id, { seasonId: game.seasonId, week: game.week }])
   );
 
-  const teamGameStats = rawTeamGameStats
+  const playerStats = rawPlayerStats
     .map((r) =>
-      transformTeamGameStats(r, {
-        games: gameIds,
-        seasonEntries: seasonEntryIds,
-        teams: teamIds,
-        managers: managerIds,
+      transformPlayerStats(
+        r,
+        { games: gameIds, seasonEntries: seasonEntryIds },
         gameInfoByFriendlyId,
-      })
+        seasonEntryInfoByFriendlyId
+      )
     )
     .filter((row) => publicSeasonIds.has(row.seasonId));
-  const players = rawPlayers.map((r) => transformPlayer(r, { teams: teamIds }));
-  const playerGameStats = rawPlayerGameStats
-    .map((r) =>
-      transformPlayerGameStats(r, {
-        games: gameIds,
-        players: playerIds,
-        seasonEntries: seasonEntryIds,
-        teams: teamIds,
-        managers: managerIds,
-        gameInfoByFriendlyId,
-      })
-    )
-    .filter((row) => publicSeasonIds.has(row.seasonId));
+
   const news = rawNews
     .map((r) => transformNews(r, { seasons: seasonIds }))
     .filter((article) => article.status === 'Published');
-  const powerRankings = rawPowerRankings
-    .map((r) => transformPowerRanking(r, { seasons: seasonIds, seasonEntries: seasonEntryIds }))
-    .filter((ranking) => ranking.published);
 
   return {
     leagueName: 'PUNT',
@@ -429,10 +331,7 @@ export async function fetchLeagueDatasetFromAirtable(env: Env): Promise<LeagueDa
     teams,
     seasonEntries,
     games,
-    teamGameStats,
-    players,
-    playerGameStats,
+    playerStats,
     news,
-    powerRankings,
   };
 }

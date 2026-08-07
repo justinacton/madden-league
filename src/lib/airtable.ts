@@ -72,9 +72,6 @@ export const AIRTABLE_TABLES = {
   teams: 'Teams',
   seasonEntries: 'Season Entries',
   games: 'Games',
-  teamGameStats: 'Team Game Stats',
-  players: 'Players',
-  playerGameStats: 'Player Game Stats',
+  playerStats: 'Player Stats',
   news: 'News',
-  powerRankings: 'Power Rankings',
 } as const;

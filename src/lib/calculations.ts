@@ -5,14 +5,13 @@ import type {
   ManagerCareerSummary,
   ManagerStatsEntry,
   HeadToHeadRecord,
-  PlayerGameStats,
   PlayerLeaderboardEntry,
   PlayerPosition,
+  PlayerStats,
   Season,
   SeasonEntry,
   Standing,
   Team,
-  TeamGameStats,
   TeamLeaderboardEntry,
   TeamSummary,
   ManagerSummary,
@@ -80,11 +79,10 @@ export function toGameSummary(
     awayManager: toManagerSummary(awayManager),
     homeScore: game.homeScore,
     awayScore: game.awayScore,
-    isTie: game.isTie,
+    isTie: game.status === 'Final' && game.homeScore === game.awayScore,
     overtime: game.overtime,
     recap: game.recap,
     featuredGame: game.featuredGame,
-    publicNotes: game.publicNotes,
   };
 }
 
@@ -95,7 +93,7 @@ export function toGameSummary(
 // (standings, team stats, manager stats, player leaderboards) only count
 // games with status "Final" and gameType "Regular Season". Exhibition games
 // never count toward any statistic. Playoff/Championship results feed career
-// playoff records and final finishes, but not the regular-season leaderboards.
+// playoff records, but not the regular-season leaderboards.
 // ---------------------------------------------------------------------------
 
 export function filterFinalRegularSeasonGames(games: Game[]): Game[] {
@@ -122,6 +120,13 @@ export function getGameResultForEntry(game: Game, seasonEntryId: string): GameRe
   const homeWon = homeScore > awayScore;
   if (isHome) return homeWon ? 'W' : 'L';
   return homeWon ? 'L' : 'W';
+}
+
+/** Same as getGameResultForEntry, but matches whichever side belongs to any of a manager's Season Entries (career-wide, across team changes). */
+function getGameResultForManagerEntries(game: Game, managerEntryIds: Set<string>): GameResult | null {
+  if (managerEntryIds.has(game.homeSeasonEntryId)) return getGameResultForEntry(game, game.homeSeasonEntryId);
+  if (managerEntryIds.has(game.awaySeasonEntryId)) return getGameResultForEntry(game, game.awaySeasonEntryId);
+  return null;
 }
 
 function pointsForAgainst(game: Game, seasonEntryId: string): { pointsFor: number; pointsAgainst: number } {
@@ -224,6 +229,46 @@ export function computeStreak(games: Game[], seasonEntryId: string): string {
   }
 
   return `${lastResult}${count}`;
+}
+
+/** Career-wide version of computeStreak: follows a manager across every Season Entry they've ever used. */
+export function computeManagerCurrentStreak(games: Game[], managerEntryIds: Set<string>): string {
+  const relevant = sortGamesChronologically(games).filter(
+    (game) => getGameResultForManagerEntries(game, managerEntryIds) !== null
+  );
+  if (relevant.length === 0) return '-';
+
+  const lastGame = relevant[relevant.length - 1]!;
+  const lastResult = getGameResultForManagerEntries(lastGame, managerEntryIds)!;
+
+  let count = 0;
+  for (let i = relevant.length - 1; i >= 0; i -= 1) {
+    const result = getGameResultForManagerEntries(relevant[i]!, managerEntryIds);
+    if (result !== lastResult) break;
+    count += 1;
+  }
+
+  return `${lastResult}${count}`;
+}
+
+/** Longest consecutive-wins run across a manager's entire career (any team). */
+export function computeLongestWinStreak(games: Game[], managerEntryIds: Set<string>): number {
+  const relevant = sortGamesChronologically(games).filter(
+    (game) => getGameResultForManagerEntries(game, managerEntryIds) !== null
+  );
+
+  let longest = 0;
+  let current = 0;
+  for (const game of relevant) {
+    const result = getGameResultForManagerEntries(game, managerEntryIds);
+    if (result === 'W') {
+      current += 1;
+      longest = Math.max(longest, current);
+    } else {
+      current = 0;
+    }
+  }
+  return longest;
 }
 
 // ---------------------------------------------------------------------------
@@ -333,11 +378,15 @@ export function computeManagerCareerSummary(
   let careerWins = 0;
   let careerLosses = 0;
   let careerTies = 0;
+  let careerPointsFor = 0;
+  let careerPointsAgainst = 0;
   for (const entry of managerEntries) {
     const record = computeRecord(regularSeasonGames, entry.id);
     careerWins += record.wins;
     careerLosses += record.losses;
     careerTies += record.ties;
+    careerPointsFor += record.pointsFor;
+    careerPointsAgainst += record.pointsAgainst;
   }
 
   let careerPlayoffWins = 0;
@@ -350,10 +399,14 @@ export function computeManagerCareerSummary(
 
   const seasonsPlayed = new Set(managerEntries.map((entry) => entry.seasonId)).size;
   const championships = input.seasons.filter((s) => s.championManagerId === managerId).length;
-  const runnerUpFinishes = input.seasons.filter((s) => s.runnerUpManagerId === managerId).length;
+  const championshipAppearances = input.seasons.filter(
+    (s) => s.championManagerId === managerId || s.runnerUpManagerId === managerId
+  ).length;
 
-  const careerGamesPlayed = careerWins + careerLosses + careerTies;
-  const careerWinPercentage = computeWinPercentage(careerWins, careerTies, careerGamesPlayed);
+  const careerGames = careerWins + careerLosses + careerTies;
+  const careerWinPercentage = computeWinPercentage(careerWins, careerTies, careerGames);
+  const currentStreak = computeManagerCurrentStreak(regularSeasonGames, managerEntryIds);
+  const longestWinStreak = computeLongestWinStreak(regularSeasonGames, managerEntryIds);
 
   const currentEntry = currentSeasonId
     ? managerEntries.find((entry) => entry.seasonId === currentSeasonId)
@@ -375,15 +428,21 @@ export function computeManagerCareerSummary(
     displayName: manager.displayName,
     slug: manager.slug,
     currentTeam: currentTeam ? toTeamSummary(currentTeam) : undefined,
+    careerGames,
     careerWins,
     careerLosses,
     careerTies,
     careerWinPercentage,
+    careerPointsFor,
+    careerPointsAgainst,
+    careerPointDifferential: careerPointsFor - careerPointsAgainst,
     careerPlayoffWins,
     careerPlayoffLosses,
+    championshipAppearances,
     championships,
-    runnerUpFinishes,
     seasonsPlayed,
+    currentStreak,
+    longestWinStreak,
     currentSeasonRecord,
   };
 }
@@ -444,13 +503,14 @@ export function computeHeadToHead(
 }
 
 // ---------------------------------------------------------------------------
-// Team leaderboard / rankings
+// Team leaderboard / rankings — calculated entirely from Games (points) and
+// Player Stats (everything else). There is no Team Stats table.
 // ---------------------------------------------------------------------------
 
 export interface TeamStatsInput {
   seasonEntries: SeasonEntry[];
   games: Game[];
-  teamGameStats: TeamGameStats[];
+  playerStats: PlayerStats[];
   teams: Team[];
   managers: Manager[];
 }
@@ -459,9 +519,10 @@ export function computeTeamLeaderboard(seasonId: string, input: TeamStatsInput):
   const entries = input.seasonEntries.filter((entry) => entry.seasonId === seasonId);
   const teamsById = byId(input.teams);
   const managersById = byId(input.managers);
-  const regularSeasonGameIds = new Set(
-    filterFinalRegularSeasonGames(input.games.filter((game) => game.seasonId === seasonId)).map((g) => g.id)
+  const regularSeasonGames = filterFinalRegularSeasonGames(
+    input.games.filter((game) => game.seasonId === seasonId)
   );
+  const regularSeasonGameIds = new Set(regularSeasonGames.map((g) => g.id));
 
   const unranked = entries.map((entry) => {
     const team = teamsById.get(entry.teamId);
@@ -469,36 +530,41 @@ export function computeTeamLeaderboard(seasonId: string, input: TeamStatsInput):
     if (!team || !manager) {
       throw new Error(`Season entry ${entry.id} references a missing team or manager`);
     }
-    const statsRows = input.teamGameStats.filter(
+
+    // Games played and points always come from the Games table, independent
+    // of whether Player Stats rows have been entered yet for those games.
+    const record = computeRecord(regularSeasonGames, entry.id);
+    const games = record.gamesPlayed;
+
+    const statRows = input.playerStats.filter(
       (row) => row.seasonEntryId === entry.id && regularSeasonGameIds.has(row.gameId)
     );
-    const games = statsRows.length;
-    const sum = (selector: (row: TeamGameStats) => number | undefined) =>
-      statsRows.reduce((total, row) => total + (selector(row) ?? 0), 0);
+    const sum = (selector: (row: PlayerStats) => number | undefined) =>
+      statRows.reduce((total, row) => total + (selector(row) ?? 0), 0);
 
-    const pointsFor = sum((r) => r.points);
-    const pointsAgainstBySeasonEntry = computeRecord(
-      input.games.filter((g) => regularSeasonGameIds.has(g.id)),
-      entry.id
-    ).pointsAgainst;
-    const turnovers = sum((r) => r.turnovers);
-    const takeaways = sum((r) => r.takeaways);
+    const passingYards = sum((r) => r.passingYards);
+    const rushingYards = sum((r) => r.rushingYards);
+    // Turnovers/takeaways are best-effort: interceptions + lost fumbles, both
+    // optional fields per the spec that may go unused if hard to collect.
+    const turnovers = sum((r) => r.interceptionsThrown) + sum((r) => r.fumblesLost);
+    const takeaways = sum((r) => r.interceptions) + sum((r) => r.fumbleRecoveries);
 
     const result: TeamLeaderboardEntry = {
       rank: 0,
       team: toTeamSummary(team),
       manager: toManagerSummary(manager),
       games,
-      pointsPerGame: safeDivide(pointsFor, games),
-      pointsAllowedPerGame: safeDivide(pointsAgainstBySeasonEntry, games),
-      pointDifferentialPerGame: safeDivide(pointsFor - pointsAgainstBySeasonEntry, games),
-      offensiveYardsPerGame: safeDivide(sum((r) => r.totalOffenseYards), games),
-      passingYardsPerGame: safeDivide(sum((r) => r.passingYards), games),
-      rushingYardsPerGame: safeDivide(sum((r) => r.rushingYards), games),
+      pointsPerGame: safeDivide(record.pointsFor, games),
+      pointsAllowedPerGame: safeDivide(record.pointsAgainst, games),
+      pointDifferentialPerGame: safeDivide(record.pointsFor - record.pointsAgainst, games),
+      offensiveYardsPerGame: safeDivide(passingYards + rushingYards, games),
+      passingYardsPerGame: safeDivide(passingYards, games),
+      rushingYardsPerGame: safeDivide(rushingYards, games),
       turnoversPerGame: safeDivide(turnovers, games),
       takeawaysPerGame: safeDivide(takeaways, games),
       turnoverDifferential: takeaways - turnovers,
-      sacksPerGame: safeDivide(sum((r) => r.defensiveSacks), games),
+      sacksPerGame: safeDivide(sum((r) => r.sacks), games),
+      tacklesPerGame: safeDivide(sum((r) => r.tackles), games),
     };
     return result;
   });
@@ -556,58 +622,67 @@ export function computeManagerSeasonStats(seasonId: string, input: TeamStatsInpu
 }
 
 // ---------------------------------------------------------------------------
-// Player leaderboards
+// Player leaderboards — grouped by normalized player name (there is no
+// separate Players table), scoped to one Season Entry so a same-named player
+// on two different teams in the same season is never merged together.
 // ---------------------------------------------------------------------------
 
 export interface PlayerStatsInput {
-  playerGameStats: PlayerGameStats[];
-  players: { id: string; fullName: string; position: PlayerPosition }[];
+  playerStats: PlayerStats[];
   seasonEntries: SeasonEntry[];
   teams: Team[];
   managers: Manager[];
   games: Game[];
 }
 
+function normalizePlayerName(name: string): string {
+  return name.trim().toLowerCase();
+}
+
 interface AggregatedPlayerStats {
-  playerId: string;
+  playerName: string;
+  position: PlayerPosition;
   seasonEntryId: string;
-  games: number;
+  gameIds: Set<string>;
   totals: Record<string, number>;
 }
 
-function aggregatePlayerGameStats(seasonId: string, input: PlayerStatsInput): AggregatedPlayerStats[] {
+const SUM_FIELDS: (keyof PlayerStats)[] = [
+  'passCompletions', 'passAttempts', 'passingYards', 'passingTouchdowns', 'interceptionsThrown',
+  'rushAttempts', 'rushingYards', 'rushingTouchdowns',
+  'receptions', 'receivingYards', 'receivingTouchdowns',
+  'tackles', 'sacks', 'interceptions', 'forcedFumbles', 'fumbleRecoveries', 'defensiveTouchdowns',
+  'fumbles', 'fumblesLost',
+];
+const MAX_FIELDS: (keyof PlayerStats)[] = ['longRush', 'longReception'];
+
+function aggregatePlayerStats(seasonId: string, input: PlayerStatsInput): AggregatedPlayerStats[] {
   const regularSeasonGameIds = new Set(
     filterFinalRegularSeasonGames(input.games.filter((g) => g.seasonId === seasonId)).map((g) => g.id)
   );
-  const rows = input.playerGameStats.filter(
+  const rows = input.playerStats.filter(
     (row) => row.seasonId === seasonId && regularSeasonGameIds.has(row.gameId)
   );
 
   const byPlayer = new Map<string, AggregatedPlayerStats>();
-  const numericKeys: (keyof PlayerGameStats)[] = [
-    'passCompletions', 'passAttempts', 'passingYards', 'passingTouchdowns', 'interceptionsThrown', 'sacksTaken',
-    'rushingAttempts', 'rushingYards', 'rushingTouchdowns', 'longestRush', 'fumbles',
-    'receptions', 'receivingYards', 'receivingTouchdowns', 'longestReception', 'drops',
-    'tackles', 'tacklesForLoss', 'sacks', 'interceptions', 'forcedFumbles', 'fumbleRecoveries', 'defensiveTouchdowns',
-  ];
 
   for (const row of rows) {
-    const key = `${row.playerId}:${row.seasonEntryId}`;
+    const key = `${normalizePlayerName(row.playerName)}::${row.seasonEntryId}`;
     const existing = byPlayer.get(key) ?? {
-      playerId: row.playerId,
+      playerName: row.playerName.trim(),
+      position: row.position,
       seasonEntryId: row.seasonEntryId,
-      games: 0,
+      gameIds: new Set<string>(),
       totals: {},
     };
-    existing.games += row.gamesPlayedValue ?? 1;
-    for (const field of numericKeys) {
+    existing.gameIds.add(row.gameId);
+    for (const field of SUM_FIELDS) {
       const value = row[field];
-      if (typeof value === 'number') {
-        const isMaxStat = field === 'longestRush' || field === 'longestReception';
-        existing.totals[field] = isMaxStat
-          ? Math.max(existing.totals[field] ?? 0, value)
-          : (existing.totals[field] ?? 0) + value;
-      }
+      if (typeof value === 'number') existing.totals[field] = (existing.totals[field] ?? 0) + value;
+    }
+    for (const field of MAX_FIELDS) {
+      const value = row[field];
+      if (typeof value === 'number') existing.totals[field] = Math.max(existing.totals[field] ?? 0, value);
     }
     byPlayer.set(key, existing);
   }
@@ -619,9 +694,8 @@ function buildLeaderboardBase(
   aggregated: AggregatedPlayerStats,
   input: PlayerStatsInput
 ): { base: PlayerLeaderboardEntry; totals: Record<string, number> } | null {
-  const player = input.players.find((p) => p.id === aggregated.playerId);
   const entry = input.seasonEntries.find((e) => e.id === aggregated.seasonEntryId);
-  if (!player || !entry) return null;
+  if (!entry) return null;
   const team = input.teams.find((t) => t.id === entry.teamId);
   const manager = input.managers.find((m) => m.id === entry.managerId);
   if (!team || !manager) return null;
@@ -629,12 +703,11 @@ function buildLeaderboardBase(
   return {
     base: {
       rank: 0,
-      playerId: player.id,
-      playerName: player.fullName,
-      position: player.position,
+      playerName: aggregated.playerName,
+      position: aggregated.position,
       team: toTeamSummary(team),
       manager: toManagerSummary(manager),
-      games: aggregated.games,
+      games: aggregated.gameIds.size,
     },
     totals: aggregated.totals,
   };
@@ -647,7 +720,7 @@ function rank<T>(items: T[], sortDesc: (item: T) => number): (T & { rank: number
 }
 
 export function computePassingLeaderboard(seasonId: string, input: PlayerStatsInput): PlayerLeaderboardEntry[] {
-  const aggregated = aggregatePlayerGameStats(seasonId, input).filter((a) => (a.totals.passAttempts ?? 0) > 0);
+  const aggregated = aggregatePlayerStats(seasonId, input).filter((a) => (a.totals.passAttempts ?? 0) > 0);
   const entries = aggregated
     .map((a) => buildLeaderboardBase(a, input))
     .filter((x): x is NonNullable<typeof x> => x !== null)
@@ -664,23 +737,23 @@ export function computePassingLeaderboard(seasonId: string, input: PlayerStatsIn
 }
 
 export function computeRushingLeaderboard(seasonId: string, input: PlayerStatsInput): PlayerLeaderboardEntry[] {
-  const aggregated = aggregatePlayerGameStats(seasonId, input).filter((a) => (a.totals.rushingAttempts ?? 0) > 0);
+  const aggregated = aggregatePlayerStats(seasonId, input).filter((a) => (a.totals.rushAttempts ?? 0) > 0);
   const entries = aggregated
     .map((a) => buildLeaderboardBase(a, input))
     .filter((x): x is NonNullable<typeof x> => x !== null)
     .map(({ base, totals }) => ({
       ...base,
-      rushingAttempts: totals.rushingAttempts ?? 0,
+      rushAttempts: totals.rushAttempts ?? 0,
       rushingYards: totals.rushingYards ?? 0,
-      yardsPerAttempt: safeDivide(totals.rushingYards ?? 0, totals.rushingAttempts ?? 0),
+      yardsPerAttempt: safeDivide(totals.rushingYards ?? 0, totals.rushAttempts ?? 0),
       rushingTouchdowns: totals.rushingTouchdowns ?? 0,
-      longestRush: totals.longestRush ?? 0,
+      longRush: totals.longRush ?? 0,
     }));
   return rank(entries, (e) => e.rushingYards ?? 0);
 }
 
 export function computeReceivingLeaderboard(seasonId: string, input: PlayerStatsInput): PlayerLeaderboardEntry[] {
-  const aggregated = aggregatePlayerGameStats(seasonId, input).filter((a) => (a.totals.receptions ?? 0) > 0);
+  const aggregated = aggregatePlayerStats(seasonId, input).filter((a) => (a.totals.receptions ?? 0) > 0);
   const entries = aggregated
     .map((a) => buildLeaderboardBase(a, input))
     .filter((x): x is NonNullable<typeof x> => x !== null)
@@ -690,18 +763,18 @@ export function computeReceivingLeaderboard(seasonId: string, input: PlayerStats
       receivingYards: totals.receivingYards ?? 0,
       yardsPerReception: safeDivide(totals.receivingYards ?? 0, totals.receptions ?? 0),
       receivingTouchdowns: totals.receivingTouchdowns ?? 0,
-      longestReception: totals.longestReception ?? 0,
+      longReception: totals.longReception ?? 0,
     }));
   return rank(entries, (e) => e.receivingYards ?? 0);
 }
 
 const DEFENSE_FIELD_MAP = {
+  tackles: 'tackles',
   sacks: 'sacks',
   interceptions: 'interceptions',
   forcedFumbles: 'forcedFumbles',
   fumbleRecoveries: 'fumbleRecoveries',
   defensiveTouchdowns: 'defensiveTouchdowns',
-  tackles: 'tackles',
 } as const;
 
 export type DefenseCategory = keyof typeof DEFENSE_FIELD_MAP;
@@ -712,18 +785,18 @@ export function computeDefenseLeaderboard(
   input: PlayerStatsInput
 ): PlayerLeaderboardEntry[] {
   const field = DEFENSE_FIELD_MAP[category];
-  const aggregated = aggregatePlayerGameStats(seasonId, input).filter((a) => (a.totals[field] ?? 0) > 0);
+  const aggregated = aggregatePlayerStats(seasonId, input).filter((a) => (a.totals[field] ?? 0) > 0);
   const entries = aggregated
     .map((a) => buildLeaderboardBase(a, input))
     .filter((x): x is NonNullable<typeof x> => x !== null)
     .map(({ base, totals }) => ({
       ...base,
+      tackles: totals.tackles ?? 0,
       sacks: totals.sacks ?? 0,
       interceptions: totals.interceptions ?? 0,
       forcedFumbles: totals.forcedFumbles ?? 0,
       fumbleRecoveries: totals.fumbleRecoveries ?? 0,
       defensiveTouchdowns: totals.defensiveTouchdowns ?? 0,
-      tackles: totals.tackles ?? 0,
     }));
   return rank(entries, (e) => e[category] ?? 0);
 }

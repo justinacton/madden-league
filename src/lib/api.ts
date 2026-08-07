@@ -11,7 +11,7 @@ import type {
   ManagerCareerSummary,
   NewsArticle,
   PlayerLeaderboardEntry,
-  PowerRanking,
+  PlayerStats,
   Season,
   SiteInfo,
   Standing,
@@ -144,10 +144,18 @@ export interface StatLine {
   value: string;
 }
 
+export interface TeamGameTotals {
+  totalOffenseYards: number;
+  passingYards: number;
+  rushingYards: number;
+  turnovers: number;
+  sacks: number;
+}
+
 export interface GameDetail {
   game: GameSummary;
-  homeStats: ReturnType<typeof buildTeamStatLine> | null;
-  awayStats: ReturnType<typeof buildTeamStatLine> | null;
+  homeStats: TeamGameTotals | null;
+  awayStats: TeamGameTotals | null;
   leaders: {
     passing: StatLine[];
     rushing: StatLine[];
@@ -156,9 +164,19 @@ export interface GameDetail {
   };
 }
 
-function buildTeamStatLine(data: LeagueDataset, gameId: string, teamId: string) {
-  const row = data.teamGameStats.find((r) => r.gameId === gameId && r.teamId === teamId);
-  return row ?? null;
+/** Team-level totals for one game, summed live from that team's Player Stats rows — there is no Team Stats table. */
+function computeTeamGameTotals(rows: PlayerStats[]): TeamGameTotals {
+  const sum = (selector: (row: PlayerStats) => number | undefined) =>
+    rows.reduce((total, row) => total + (selector(row) ?? 0), 0);
+  const passingYards = sum((r) => r.passingYards);
+  const rushingYards = sum((r) => r.rushingYards);
+  return {
+    totalOffenseYards: passingYards + rushingYards,
+    passingYards,
+    rushingYards,
+    turnovers: sum((r) => r.interceptionsThrown) + sum((r) => r.fumblesLost),
+    sacks: sum((r) => r.sacks),
+  };
 }
 
 export async function getGameDetail(env: Env, gameId: string, opts?: DataOptions): Promise<GameDetail | null> {
@@ -168,10 +186,9 @@ export async function getGameDetail(env: Env, gameId: string, opts?: DataOptions
   const summary = toGameSummary(game, data);
   if (!summary) return null;
 
-  const playerRows = data.playerGameStats.filter((r) => r.gameId === gameId);
-  const playersById = new Map(data.players.map((p) => [p.id, p]));
-  const teamsById = new Map(data.teams.map((t) => [t.id, t]));
-  const managersById = new Map(data.managers.map((m) => [m.id, m]));
+  const playerRows = data.playerStats.filter((r) => r.gameId === gameId);
+  const homeRows = playerRows.filter((r) => r.teamId === game.homeTeamId);
+  const awayRows = playerRows.filter((r) => r.teamId === game.awayTeamId);
 
   const topBy = (
     rows: typeof playerRows,
@@ -183,12 +200,11 @@ export async function getGameDetail(env: Env, gameId: string, opts?: DataOptions
         const candidates = rows.filter((r) => r.teamId === teamId && (selector(r) ?? 0) > 0);
         const best = candidates.sort((a, b) => (selector(b) ?? 0) - (selector(a) ?? 0))[0];
         if (!best) return null;
-        const player = playersById.get(best.playerId);
-        const team = teamsById.get(best.teamId);
-        const manager = managersById.get(best.managerId);
-        if (!player || !team || !manager) return null;
+        const team = data.teams.find((t) => t.id === best.teamId);
+        const manager = data.managers.find((m) => m.id === best.managerId);
+        if (!team || !manager) return null;
         return {
-          label: player.fullName,
+          label: best.playerName,
           team: toTeamSummary(team),
           manager: toManagerSummary(manager),
           value: formatter(best),
@@ -199,8 +215,8 @@ export async function getGameDetail(env: Env, gameId: string, opts?: DataOptions
 
   return {
     game: summary,
-    homeStats: buildTeamStatLine(data, gameId, game.homeTeamId),
-    awayStats: buildTeamStatLine(data, gameId, game.awayTeamId),
+    homeStats: homeRows.length > 0 ? computeTeamGameTotals(homeRows) : null,
+    awayStats: awayRows.length > 0 ? computeTeamGameTotals(awayRows) : null,
     leaders: {
       passing: topBy(
         playerRows,
@@ -417,17 +433,18 @@ export interface HomeDashboard {
   passingLeader: PlayerLeaderboardEntry | null;
   rushingLeader: PlayerLeaderboardEntry | null;
   receivingLeader: PlayerLeaderboardEntry | null;
+  tacklesLeader: PlayerLeaderboardEntry | null;
   sackLeader: PlayerLeaderboardEntry | null;
   interceptionLeader: PlayerLeaderboardEntry | null;
   standingsPreview: Standing[];
   currentWeekGames: GameSummary[];
   recentResults: GameSummary[];
   news: NewsArticle[];
-  powerRankings: (PowerRanking & { team: TeamSummary; manager: ManagerSummary })[];
   leagueLeaders: {
     passing: PlayerLeaderboardEntry[];
     rushing: PlayerLeaderboardEntry[];
     receiving: PlayerLeaderboardEntry[];
+    tackles: PlayerLeaderboardEntry[];
     sacks: PlayerLeaderboardEntry[];
     interceptions: PlayerLeaderboardEntry[];
   };
@@ -443,6 +460,7 @@ export async function getHomeDashboard(env: Env, opts?: DataOptions): Promise<Ho
   const passing = computePassingLeaderboard(season.id, data);
   const rushing = computeRushingLeaderboard(season.id, data);
   const receiving = computeReceivingLeaderboard(season.id, data);
+  const tackles = computeDefenseLeaderboard(season.id, 'tackles', data);
   const sacks = computeDefenseLeaderboard(season.id, 'sacks', data);
   const interceptions = computeDefenseLeaderboard(season.id, 'interceptions', data);
 
@@ -464,24 +482,6 @@ export async function getHomeDashboard(env: Env, opts?: DataOptions): Promise<Ho
     .map((g) => toGameSummary(g, data))
     .filter((s): s is GameSummary => s !== null);
 
-  const teamsById = new Map(data.teams.map((t) => [t.id, t]));
-  const managersById = new Map(data.managers.map((m) => [m.id, m]));
-  const latestPowerRankingWeek = Math.max(
-    0,
-    ...data.powerRankings.filter((r) => r.seasonId === season.id && r.published).map((r) => r.week)
-  );
-  const powerRankings = data.powerRankings
-    .filter((r) => r.seasonId === season.id && r.published && r.week === latestPowerRankingWeek)
-    .sort((a, b) => a.rank - b.rank)
-    .map((ranking) => {
-      const entry = data.seasonEntries.find((e) => e.id === ranking.seasonEntryId);
-      const team = entry ? teamsById.get(entry.teamId) : undefined;
-      const manager = entry ? managersById.get(entry.managerId) : undefined;
-      if (!team || !manager) return null;
-      return { ...ranking, team: toTeamSummary(team), manager: toManagerSummary(manager) };
-    })
-    .filter((r): r is NonNullable<typeof r> => r !== null);
-
   return {
     season,
     managerCount,
@@ -491,6 +491,7 @@ export async function getHomeDashboard(env: Env, opts?: DataOptions): Promise<Ho
     passingLeader: passing[0] ?? null,
     rushingLeader: rushing[0] ?? null,
     receivingLeader: receiving[0] ?? null,
+    tacklesLeader: tackles[0] ?? null,
     sackLeader: sacks[0] ?? null,
     interceptionLeader: interceptions[0] ?? null,
     standingsPreview: standings.slice(0, standings.length <= 8 ? standings.length : 4),
@@ -500,11 +501,11 @@ export async function getHomeDashboard(env: Env, opts?: DataOptions): Promise<Ho
       .filter((n) => n.status === 'Published')
       .sort((a, b) => b.publishDate.localeCompare(a.publishDate))
       .slice(0, 3),
-    powerRankings,
     leagueLeaders: {
       passing: passing.slice(0, 3),
       rushing: rushing.slice(0, 3),
       receiving: receiving.slice(0, 3),
+      tackles: tackles.slice(0, 3),
       sacks: sacks.slice(0, 3),
       interceptions: interceptions.slice(0, 3),
     },
@@ -525,30 +526,4 @@ export async function getNewsList(env: Env, filters: NewsFilters = {}, opts?: Da
 export async function getNewsArticle(env: Env, slug: string, opts?: DataOptions): Promise<NewsArticle | null> {
   const { data } = await getLeagueDataset(env, opts);
   return data.news.find((n) => n.slug === slug && n.status === 'Published') ?? null;
-}
-
-export async function getPowerRankingsForSeason(
-  env: Env,
-  seasonId: string,
-  opts?: DataOptions
-): Promise<(PowerRanking & { team: TeamSummary; manager: ManagerSummary })[]> {
-  const { data } = await getLeagueDataset(env, opts);
-  const latestWeek = Math.max(
-    0,
-    ...data.powerRankings.filter((r) => r.seasonId === seasonId && r.published).map((r) => r.week)
-  );
-  const teamsById = new Map(data.teams.map((t) => [t.id, t]));
-  const managersById = new Map(data.managers.map((m) => [m.id, m]));
-
-  return data.powerRankings
-    .filter((r) => r.seasonId === seasonId && r.published && r.week === latestWeek)
-    .sort((a, b) => a.rank - b.rank)
-    .map((ranking) => {
-      const entry = data.seasonEntries.find((e) => e.id === ranking.seasonEntryId);
-      const team = entry ? teamsById.get(entry.teamId) : undefined;
-      const manager = entry ? managersById.get(entry.managerId) : undefined;
-      if (!team || !manager) return null;
-      return { ...ranking, team: toTeamSummary(team), manager: toManagerSummary(manager) };
-    })
-    .filter((r): r is NonNullable<typeof r> => r !== null);
 }

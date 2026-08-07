@@ -1,9 +1,20 @@
-import type { Game, PlayerGameStats, SeasonEntry, TeamGameStats } from '../types';
+import type { Game, PlayerPosition, PlayerStats, SeasonEntry } from '../types';
 import { season1Entries, season2Entries } from './seasons';
-import { playerIdsByTeamAndSlot } from './players';
 import { createRng, pick, randomInt, roundRobinRounds } from './rng';
 
 const rng = createRng(20260806);
+
+/** One QB, RB, WR, and defender tracked per team — enough to exercise every stat category. */
+const ROSTER_BY_TEAM: Record<string, { qb: string; rb: string; wr: string; def: string; defPosition: PlayerPosition }> = {
+  chiefs: { qb: 'Derek Vance', rb: 'Malik Green', wr: 'Tyson Reed', def: 'Bobby Sharp', defPosition: 'LB' },
+  bills: { qb: 'Colton Vaughn', rb: 'Ezra Combs', wr: 'Nate Ellison', def: 'Marcus Doyle', defPosition: 'CB' },
+  niners: { qb: 'Gavin Marsh', rb: 'Devon Kessler', wr: 'Isaiah Cruz', def: 'Trent Lowry', defPosition: 'S' },
+  eagles: { qb: 'Owen Whitfield', rb: 'Julian Marks', wr: 'Andre Booker', def: 'Sean Cargill', defPosition: 'LB' },
+  cowboys: { qb: 'Ryder Holcomb', rb: 'Xavier Pruitt', wr: 'Damon Weller', def: 'Chase Ambrose', defPosition: 'CB' },
+  ravens: { qb: 'Miles Sutton', rb: 'Corey Nash', wr: 'Jared Finch', def: 'Reggie Voss', defPosition: 'LB' },
+  lions: { qb: 'Preston Boyle', rb: 'Dante Rowell', wr: 'Cody Larkin', def: 'Wes Hartman', defPosition: 'S' },
+  dolphins: { qb: 'Lucas Trent', rb: 'Amir Delgado', wr: 'Blake Sorensen', def: 'Nico Farrow', defPosition: 'CB' },
+};
 
 function entryLookup(entries: SeasonEntry[]): Map<string, SeasonEntry> {
   const map = new Map<string, SeasonEntry>();
@@ -18,13 +29,13 @@ function addDays(iso: string, days: number): string {
 }
 
 const TD_COUNT_WEIGHTS = [0, 0, 1, 1, 1, 2, 2, 3, 4];
+const SHORT_TD_WEIGHTS = [0, 0, 0, 1, 1, 2];
 const TURNOVER_WEIGHTS = [0, 0, 0, 1, 1, 2, 3];
 const RARE_EVENT_WEIGHTS = [0, 0, 0, 0, 0, 0, 0, 1, 1, 2];
 
 interface GeneratedGame {
   game: Game;
-  teamGameStats: TeamGameStats[];
-  playerGameStats: PlayerGameStats[];
+  playerStats: PlayerStats[];
 }
 
 function generateFinalGame(params: {
@@ -52,8 +63,6 @@ function generateFinalGame(params: {
     awayScore = homeScore - params.minMargin - randomInt(rng, 0, 6);
     if (awayScore < 0) awayScore = homeScore + params.minMargin + randomInt(rng, 0, 6);
   }
-  const isTie = homeScore === awayScore;
-  const homeWon = homeScore > awayScore;
 
   const game: Game = {
     id: params.id,
@@ -70,154 +79,85 @@ function generateFinalGame(params: {
     awayManagerId: awayEntry.managerId,
     homeScore,
     awayScore,
-    isTie,
     overtime: Math.abs(homeScore - awayScore) <= 3 && rng() > 0.7,
-    winnerManagerId: isTie ? undefined : homeWon ? homeEntry.managerId : awayEntry.managerId,
-    winnerTeamId: isTie ? undefined : homeWon ? params.homeTeamId : params.awayTeamId,
-    losingManagerId: isTie ? undefined : homeWon ? awayEntry.managerId : homeEntry.managerId,
-    losingTeamId: isTie ? undefined : homeWon ? params.awayTeamId : params.homeTeamId,
     recap: params.recap,
     featuredGame: params.featured,
-    lastUpdated: params.gameDate,
   };
 
-  // --- Team Game Stats -----------------------------------------------------
-  const homeTurnovers = pick(rng, TURNOVER_WEIGHTS);
-  const awayTurnovers = pick(rng, TURNOVER_WEIGHTS);
-  const sacksOnHome = randomInt(rng, 0, 5);
-  const sacksOnAway = randomInt(rng, 0, 5);
+  const homeGiveaways = pick(rng, TURNOVER_WEIGHTS);
+  const awayGiveaways = pick(rng, TURNOVER_WEIGHTS);
 
-  const buildTeamStats = (
+  const buildPlayerStats = (
     entry: SeasonEntry,
     teamId: string,
-    points: number,
-    turnovers: number,
-    takeaways: number,
-    sacksAllowed: number,
-    defensiveSacks: number
-  ): TeamGameStats => {
-    const totalOffenseYards = randomInt(rng, 260, 480);
-    const passingYards = Math.round(totalOffenseYards * (0.5 + rng() * 0.2));
-    const rushingYards = totalOffenseYards - passingYards;
-    const thirdDownAttempts = randomInt(rng, 10, 15);
-    const redZoneAttempts = randomInt(rng, 2, 5);
-    return {
-      id: `tgs-${params.id}-${teamId}`,
+    ownGiveaways: number,
+    opponentGiveaways: number
+  ): PlayerStats[] => {
+    const roster = ROSTER_BY_TEAM[teamId];
+    if (!roster) return [];
+
+    const base = {
       gameId: params.id,
       seasonId: params.seasonId,
       week: params.week,
       seasonEntryId: entry.id,
       teamId,
       managerId: entry.managerId,
-      points,
-      totalOffenseYards,
-      passingYards,
-      rushingYards,
-      firstDowns: randomInt(rng, 14, 26),
-      turnovers,
-      takeaways,
-      sacksAllowed,
-      defensiveSacks,
-      timeOfPossessionSeconds: randomInt(rng, 1500, 2100),
-      thirdDownMade: Math.round(thirdDownAttempts * (0.3 + rng() * 0.35)),
-      thirdDownAttempts,
-      redZoneTDs: Math.min(redZoneAttempts, randomInt(rng, 0, redZoneAttempts)),
-      redZoneAttempts,
     };
-  };
-
-  const homeStats = buildTeamStats(homeEntry, params.homeTeamId, homeScore, homeTurnovers, awayTurnovers, sacksOnHome, sacksOnAway);
-  const awayStats = buildTeamStats(awayEntry, params.awayTeamId, awayScore, awayTurnovers, homeTurnovers, sacksOnAway, sacksOnHome);
-
-  // --- Player Game Stats -----------------------------------------------------
-  const buildPlayerStats = (entry: SeasonEntry, teamId: string, teamStats: TeamGameStats): PlayerGameStats[] => {
-    const slots = playerIdsByTeamAndSlot[teamId];
-    if (!slots) return [];
 
     const passAttempts = randomInt(rng, 24, 40);
     const passCompletions = Math.round(passAttempts * (0.5 + rng() * 0.25));
-    const passingTouchdowns = pick(rng, TD_COUNT_WEIGHTS);
-    const giveaways = teamStats.turnovers ?? 0;
-    const interceptionsThrown = Math.min(giveaways, Math.round(giveaways * 0.65));
-    const fumbles = Math.max(0, giveaways - interceptionsThrown);
+    const interceptionsThrown = Math.min(ownGiveaways, randomInt(rng, 0, ownGiveaways));
+    const fumblesLost = Math.max(0, ownGiveaways - interceptionsThrown);
 
-    const rushingAttempts = randomInt(rng, 10, 26);
-    const rushingTouchdowns = pick(rng, TD_COUNT_WEIGHTS.slice(0, 6));
-
-    const receptions = randomInt(rng, 2, 10);
-    const receivingTouchdowns = Math.min(passingTouchdowns, pick(rng, TD_COUNT_WEIGHTS.slice(0, 6)));
-
-    const qb: PlayerGameStats = {
-      id: `pgs-${params.id}-${slots.qb}`,
-      gameId: params.id,
-      seasonId: params.seasonId,
-      week: params.week,
-      playerId: slots.qb,
+    const qb: PlayerStats = {
+      ...base,
+      id: `ps-${params.id}-${teamId}-qb`,
+      playerName: roster.qb,
       position: 'QB',
-      seasonEntryId: entry.id,
-      teamId,
-      managerId: entry.managerId,
-      gamesPlayedValue: 1,
       passCompletions,
       passAttempts,
-      passingYards: teamStats.passingYards ?? randomInt(rng, 150, 380),
-      passingTouchdowns,
+      passingYards: randomInt(rng, 150, 380),
+      passingTouchdowns: pick(rng, TD_COUNT_WEIGHTS),
       interceptionsThrown,
-      sacksTaken: teamStats.sacksAllowed,
     };
 
-    const rb: PlayerGameStats = {
-      id: `pgs-${params.id}-${slots.rb}`,
-      gameId: params.id,
-      seasonId: params.seasonId,
-      week: params.week,
-      playerId: slots.rb,
+    const rb: PlayerStats = {
+      ...base,
+      id: `ps-${params.id}-${teamId}-rb`,
+      playerName: roster.rb,
       position: 'RB',
-      seasonEntryId: entry.id,
-      teamId,
-      managerId: entry.managerId,
-      gamesPlayedValue: 1,
-      rushingAttempts,
-      rushingYards: teamStats.rushingYards ?? randomInt(rng, 40, 160),
-      rushingTouchdowns,
-      longestRush: randomInt(rng, 6, 45),
-      fumbles,
+      rushAttempts: randomInt(rng, 10, 26),
+      rushingYards: randomInt(rng, 40, 160),
+      rushingTouchdowns: pick(rng, SHORT_TD_WEIGHTS),
+      longRush: randomInt(rng, 6, 45),
+      fumbles: fumblesLost > 0 ? fumblesLost : undefined,
+      fumblesLost: fumblesLost > 0 ? fumblesLost : undefined,
     };
 
-    const wr: PlayerGameStats = {
-      id: `pgs-${params.id}-${slots.wr}`,
-      gameId: params.id,
-      seasonId: params.seasonId,
-      week: params.week,
-      playerId: slots.wr,
+    const wr: PlayerStats = {
+      ...base,
+      id: `ps-${params.id}-${teamId}-wr`,
+      playerName: roster.wr,
       position: 'WR',
-      seasonEntryId: entry.id,
-      teamId,
-      managerId: entry.managerId,
-      gamesPlayedValue: 1,
-      receptions,
-      receivingYards: Math.round((teamStats.passingYards ?? 200) * (0.4 + rng() * 0.3)),
-      receivingTouchdowns,
-      longestReception: randomInt(rng, 9, 55),
+      receptions: randomInt(rng, 2, 10),
+      receivingYards: randomInt(rng, 20, 160),
+      receivingTouchdowns: pick(rng, SHORT_TD_WEIGHTS),
+      longReception: randomInt(rng, 9, 55),
     };
 
-    const def: PlayerGameStats = {
-      id: `pgs-${params.id}-${slots.def}`,
-      gameId: params.id,
-      seasonId: params.seasonId,
-      week: params.week,
-      playerId: slots.def,
-      position: 'LB',
-      seasonEntryId: entry.id,
-      teamId,
-      managerId: entry.managerId,
-      gamesPlayedValue: 1,
+    const defInterceptions = Math.min(opponentGiveaways, randomInt(rng, 0, opponentGiveaways));
+    const defFumbleRecoveries = Math.max(0, opponentGiveaways - defInterceptions);
+    const def: PlayerStats = {
+      ...base,
+      id: `ps-${params.id}-${teamId}-def`,
+      playerName: roster.def,
+      position: roster.defPosition,
       tackles: randomInt(rng, 3, 11),
-      tacklesForLoss: randomInt(rng, 0, 2),
-      sacks: Math.round((teamStats.defensiveSacks ?? 0) * (0.3 + rng() * 0.4) * 2) / 2,
-      interceptions: pick(rng, RARE_EVENT_WEIGHTS),
-      forcedFumbles: pick(rng, RARE_EVENT_WEIGHTS),
-      fumbleRecoveries: pick(rng, RARE_EVENT_WEIGHTS),
+      sacks: Math.round(randomInt(rng, 0, 5) * 2) / 2,
+      interceptions: defInterceptions,
+      forcedFumbles: defFumbleRecoveries > 0 ? defFumbleRecoveries : pick(rng, RARE_EVENT_WEIGHTS),
+      fumbleRecoveries: defFumbleRecoveries,
       defensiveTouchdowns: rng() > 0.95 ? 1 : 0,
     };
 
@@ -225,11 +165,11 @@ function generateFinalGame(params: {
   };
 
   const playerStats = [
-    ...buildPlayerStats(homeEntry, params.homeTeamId, homeStats),
-    ...buildPlayerStats(awayEntry, params.awayTeamId, awayStats),
+    ...buildPlayerStats(homeEntry, params.homeTeamId, homeGiveaways, awayGiveaways),
+    ...buildPlayerStats(awayEntry, params.awayTeamId, awayGiveaways, homeGiveaways),
   ];
 
-  return { game, teamGameStats: [homeStats, awayStats], playerGameStats: playerStats };
+  return { game, playerStats };
 }
 
 function generateScheduledGame(params: {
@@ -264,13 +204,11 @@ function generateScheduledGame(params: {
 }
 
 const games: Game[] = [];
-const teamGameStats: TeamGameStats[] = [];
-const playerGameStats: PlayerGameStats[] = [];
+const playerStats: PlayerStats[] = [];
 
 function record(generated: GeneratedGame) {
   games.push(generated.game);
-  teamGameStats.push(...generated.teamGameStats);
-  playerGameStats.push(...generated.playerGameStats);
+  playerStats.push(...generated.playerStats);
 }
 
 // ---------------------------------------------------------------------------
@@ -409,4 +347,4 @@ week5Round.forEach(([teamA, teamB], gameIndex) => {
   );
 });
 
-export { games, teamGameStats, playerGameStats };
+export { games, playerStats };

@@ -299,6 +299,19 @@ table.data-table {
 .data-table td.team-cell, .data-table th.team-cell { white-space: normal; }
 .data-table tbody tr.top-three td:first-child { font-weight: 800; color: var(--color-accent-strong); }
 
+.data-table th[data-sort-key] { cursor: pointer; user-select: none; }
+.data-table th[data-sort-key]:hover { color: var(--color-text); }
+.data-table th[data-sort-key]:focus-visible { outline: 2px solid var(--color-accent-strong); outline-offset: -2px; }
+.data-table th[data-sort-key]::after {
+  content: '\2195';
+  display: inline-block;
+  margin-left: var(--space-1);
+  opacity: 0.35;
+  font-size: 0.85em;
+}
+.data-table th[data-sort-key][aria-sort='ascending']::after { content: '\2191'; opacity: 1; color: var(--color-accent-strong); }
+.data-table th[data-sort-key][aria-sort='descending']::after { content: '\2193'; opacity: 1; color: var(--color-accent-strong); }
+
 .team-link { display: inline-flex; align-items: center; gap: var(--space-2); color: inherit; font-weight: 600; }
 .team-link:hover { color: var(--color-accent-strong); text-decoration: none; }
 .team-logo { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; }

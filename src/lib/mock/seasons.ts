@@ -11,9 +11,7 @@ export const seasons: Season[] = [
     regularSeasonWeeks: 4,
     currentWeek: 4,
     championManagerId: 'mgr-sam',
-    championTeamId: 'niners',
     runnerUpManagerId: 'mgr-alex',
-    runnerUpTeamId: 'chiefs',
     public: true,
   },
   {
@@ -30,26 +28,26 @@ export const seasons: Season[] = [
 
 // Season 1 assignments (initial rosters).
 export const season1Entries: SeasonEntry[] = [
-  { id: 'se1-alex', seasonId: 'season-01', managerId: 'mgr-alex', teamId: 'chiefs', activeEntry: true, conference: 'AFC', division: 'AFC West', playoffSeed: 2, finalFinish: 'Runner-Up' },
-  { id: 'se1-jordan', seasonId: 'season-01', managerId: 'mgr-jordan', teamId: 'bills', activeEntry: true, conference: 'AFC', division: 'AFC East', playoffSeed: 4, finalFinish: 'Semifinal' },
-  { id: 'se1-sam', seasonId: 'season-01', managerId: 'mgr-sam', teamId: 'niners', activeEntry: true, conference: 'NFC', division: 'NFC West', playoffSeed: 1, finalFinish: 'Champion' },
-  { id: 'se1-taylor', seasonId: 'season-01', managerId: 'mgr-taylor', teamId: 'eagles', activeEntry: true, conference: 'NFC', division: 'NFC East', finalFinish: 'Missed Playoffs' },
-  { id: 'se1-casey', seasonId: 'season-01', managerId: 'mgr-casey', teamId: 'cowboys', activeEntry: true, conference: 'NFC', division: 'NFC East', finalFinish: 'Missed Playoffs' },
-  { id: 'se1-drew', seasonId: 'season-01', managerId: 'mgr-drew', teamId: 'ravens', activeEntry: true, conference: 'AFC', division: 'AFC North', playoffSeed: 3, finalFinish: 'Semifinal' },
-  { id: 'se1-morgan', seasonId: 'season-01', managerId: 'mgr-morgan', teamId: 'lions', activeEntry: true, conference: 'NFC', division: 'NFC North', finalFinish: 'Missed Playoffs' },
-  { id: 'se1-jamie', seasonId: 'season-01', managerId: 'mgr-jamie', teamId: 'dolphins', activeEntry: true, conference: 'AFC', division: 'AFC East', finalFinish: 'Missed Playoffs' },
+  { id: 'se1-alex', seasonId: 'season-01', managerId: 'mgr-alex', teamId: 'chiefs', activeEntry: true, playoffSeed: 2, finalFinish: 'Runner-Up' },
+  { id: 'se1-jordan', seasonId: 'season-01', managerId: 'mgr-jordan', teamId: 'bills', activeEntry: true, playoffSeed: 4, finalFinish: 'Semifinalist' },
+  { id: 'se1-sam', seasonId: 'season-01', managerId: 'mgr-sam', teamId: 'niners', activeEntry: true, playoffSeed: 1, finalFinish: 'Champion' },
+  { id: 'se1-taylor', seasonId: 'season-01', managerId: 'mgr-taylor', teamId: 'eagles', activeEntry: true, finalFinish: 'Regular Season' },
+  { id: 'se1-casey', seasonId: 'season-01', managerId: 'mgr-casey', teamId: 'cowboys', activeEntry: true, finalFinish: 'Regular Season' },
+  { id: 'se1-drew', seasonId: 'season-01', managerId: 'mgr-drew', teamId: 'ravens', activeEntry: true, playoffSeed: 3, finalFinish: 'Semifinalist' },
+  { id: 'se1-morgan', seasonId: 'season-01', managerId: 'mgr-morgan', teamId: 'lions', activeEntry: true, finalFinish: 'Regular Season' },
+  { id: 'se1-jamie', seasonId: 'season-01', managerId: 'mgr-jamie', teamId: 'dolphins', activeEntry: true, finalFinish: 'Regular Season' },
 ];
 
 // Season 2 assignments — Sam and Drew swap teams between seasons.
 export const season2Entries: SeasonEntry[] = [
-  { id: 'se2-alex', seasonId: 'season-02', managerId: 'mgr-alex', teamId: 'chiefs', activeEntry: true, conference: 'AFC', division: 'AFC West' },
-  { id: 'se2-jordan', seasonId: 'season-02', managerId: 'mgr-jordan', teamId: 'bills', activeEntry: true, conference: 'AFC', division: 'AFC East' },
-  { id: 'se2-sam', seasonId: 'season-02', managerId: 'mgr-sam', teamId: 'ravens', activeEntry: true, conference: 'AFC', division: 'AFC North' },
-  { id: 'se2-taylor', seasonId: 'season-02', managerId: 'mgr-taylor', teamId: 'eagles', activeEntry: true, conference: 'NFC', division: 'NFC East' },
-  { id: 'se2-casey', seasonId: 'season-02', managerId: 'mgr-casey', teamId: 'cowboys', activeEntry: true, conference: 'NFC', division: 'NFC East' },
-  { id: 'se2-drew', seasonId: 'season-02', managerId: 'mgr-drew', teamId: 'niners', activeEntry: true, conference: 'NFC', division: 'NFC West' },
-  { id: 'se2-morgan', seasonId: 'season-02', managerId: 'mgr-morgan', teamId: 'lions', activeEntry: true, conference: 'NFC', division: 'NFC North' },
-  { id: 'se2-jamie', seasonId: 'season-02', managerId: 'mgr-jamie', teamId: 'dolphins', activeEntry: true, conference: 'AFC', division: 'AFC East' },
+  { id: 'se2-alex', seasonId: 'season-02', managerId: 'mgr-alex', teamId: 'chiefs', activeEntry: true },
+  { id: 'se2-jordan', seasonId: 'season-02', managerId: 'mgr-jordan', teamId: 'bills', activeEntry: true },
+  { id: 'se2-sam', seasonId: 'season-02', managerId: 'mgr-sam', teamId: 'ravens', activeEntry: true },
+  { id: 'se2-taylor', seasonId: 'season-02', managerId: 'mgr-taylor', teamId: 'eagles', activeEntry: true },
+  { id: 'se2-casey', seasonId: 'season-02', managerId: 'mgr-casey', teamId: 'cowboys', activeEntry: true },
+  { id: 'se2-drew', seasonId: 'season-02', managerId: 'mgr-drew', teamId: 'niners', activeEntry: true },
+  { id: 'se2-morgan', seasonId: 'season-02', managerId: 'mgr-morgan', teamId: 'lions', activeEntry: true },
+  { id: 'se2-jamie', seasonId: 'season-02', managerId: 'mgr-jamie', teamId: 'dolphins', activeEntry: true },
 ];
 
 export const seasonEntries: SeasonEntry[] = [...season1Entries, ...season2Entries];

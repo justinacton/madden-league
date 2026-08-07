@@ -1,8 +1,10 @@
 /**
- * Domain types for the PUNT site. These are the shapes produced by
- * src/lib/api.ts (from either mock data or Airtable), consumed by pages and
- * returned by src/pages/api/*.ts. They intentionally do not mirror raw
- * Airtable records — see src/lib/airtableTransform.ts for that mapping.
+ * Domain types for the PUNT site, matching the 7-table Airtable architecture:
+ * Seasons, Managers, Teams, Season Entries, Games, Player Stats, News.
+ * These are the shapes produced by src/lib/api.ts (from either mock data or
+ * Airtable), consumed by pages and returned by src/pages/api/*.ts. They
+ * intentionally do not mirror raw Airtable records — see
+ * src/lib/airtableTransform.ts for that mapping.
  */
 
 export type SeasonStatus = 'Upcoming' | 'Active' | 'Completed';
@@ -17,9 +19,7 @@ export interface Season {
   currentWeek?: number;
   regularSeasonWeeks?: number;
   championManagerId?: string;
-  championTeamId?: string;
   runnerUpManagerId?: string;
-  runnerUpTeamId?: string;
   public: boolean;
 }
 
@@ -30,7 +30,6 @@ export interface Manager {
   active: boolean;
   profileImageUrl?: string;
   bio?: string;
-  joinedSeasonId?: string;
 }
 
 export type Conference = 'AFC' | 'NFC';
@@ -49,13 +48,7 @@ export interface Team {
   active: boolean;
 }
 
-export type FinalFinish =
-  | 'Champion'
-  | 'Runner-Up'
-  | 'Semifinal'
-  | 'Quarterfinal'
-  | 'Missed Playoffs'
-  | 'Eliminated';
+export type FinalFinish = 'Regular Season' | 'Playoff Qualifier' | 'Semifinalist' | 'Runner-Up' | 'Champion';
 
 export interface SeasonEntry {
   id: string;
@@ -63,14 +56,12 @@ export interface SeasonEntry {
   managerId: string;
   teamId: string;
   activeEntry: boolean;
-  conference?: Conference;
-  division?: string;
   playoffSeed?: number;
   finalFinish?: FinalFinish;
 }
 
 export type GameType = 'Regular Season' | 'Playoff' | 'Championship' | 'Exhibition';
-export type GameStatus = 'Scheduled' | 'In Progress' | 'Final' | 'Postponed' | 'Cancelled';
+export type GameStatus = 'Scheduled' | 'Final' | 'Postponed' | 'Cancelled';
 
 export interface Game {
   id: string;
@@ -87,68 +78,32 @@ export interface Game {
   awayManagerId: string;
   homeScore?: number;
   awayScore?: number;
-  winnerManagerId?: string;
-  winnerTeamId?: string;
-  losingManagerId?: string;
-  losingTeamId?: string;
-  isTie?: boolean;
   overtime?: boolean;
   recap?: string;
   featuredGame?: boolean;
-  publicNotes?: string;
-  lastUpdated?: string;
-}
-
-export interface TeamGameStats {
-  id: string;
-  gameId: string;
-  seasonId: string;
-  week: number;
-  seasonEntryId: string;
-  teamId: string;
-  managerId: string;
-  points: number;
-  totalOffenseYards?: number;
-  passingYards?: number;
-  rushingYards?: number;
-  firstDowns?: number;
-  turnovers?: number;
-  takeaways?: number;
-  sacksAllowed?: number;
-  defensiveSacks?: number;
-  timeOfPossessionSeconds?: number;
-  thirdDownMade?: number;
-  thirdDownAttempts?: number;
-  redZoneTDs?: number;
-  redZoneAttempts?: number;
 }
 
 export type PlayerPosition =
   | 'QB' | 'RB' | 'FB' | 'WR' | 'TE'
-  | 'OL' | 'DL' | 'LB' | 'CB' | 'S' | 'K' | 'P';
+  | 'OL' | 'DL' | 'DE' | 'DT' | 'LB' | 'CB' | 'S' | 'K' | 'P' | 'OTHER';
 
-export interface Player {
-  id: string;
-  fullName: string;
-  slug: string;
-  position: PlayerPosition;
-  nflTeamId: string;
-  active: boolean;
-  headshotUrl?: string;
-  sortName?: string;
-}
-
-export interface PlayerGameStats {
+/**
+ * One player's full statistical line from one game — passing, rushing,
+ * receiving, and defensive stats can all appear on the same record. There is
+ * intentionally no separate Players table; `playerName` is the Madden roster
+ * name as typed by the commissioner. Grouping/aggregation normalizes it
+ * (trim + case-insensitive) rather than relying on a stable player ID.
+ */
+export interface PlayerStats {
   id: string;
   gameId: string;
   seasonId: string;
   week: number;
-  playerId: string;
-  position: PlayerPosition;
   seasonEntryId: string;
   teamId: string;
   managerId: string;
-  gamesPlayedValue: number;
+  playerName: string;
+  position: PlayerPosition;
 
   // Passing
   passCompletions?: number;
@@ -156,31 +111,30 @@ export interface PlayerGameStats {
   passingYards?: number;
   passingTouchdowns?: number;
   interceptionsThrown?: number;
-  sacksTaken?: number;
-  passerRating?: number;
 
   // Rushing
-  rushingAttempts?: number;
+  rushAttempts?: number;
   rushingYards?: number;
   rushingTouchdowns?: number;
-  longestRush?: number;
-  fumbles?: number;
+  longRush?: number;
 
   // Receiving
   receptions?: number;
   receivingYards?: number;
   receivingTouchdowns?: number;
-  longestReception?: number;
-  drops?: number;
+  longReception?: number;
 
   // Defense
   tackles?: number;
-  tacklesForLoss?: number;
   sacks?: number;
   interceptions?: number;
   forcedFumbles?: number;
   fumbleRecoveries?: number;
   defensiveTouchdowns?: number;
+
+  // Turnovers/fumbles — optional; may go unused if hard to collect consistently.
+  fumbles?: number;
+  fumblesLost?: number;
 }
 
 export type NewsStatus = 'Draft' | 'Published';
@@ -198,17 +152,6 @@ export interface NewsArticle {
   week?: number;
   featured?: boolean;
   author?: string;
-}
-
-export interface PowerRanking {
-  id: string;
-  seasonId: string;
-  week: number;
-  rank: number;
-  previousRank?: number;
-  seasonEntryId: string;
-  commentary?: string;
-  published: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -252,9 +195,6 @@ export interface Standing {
   pointDifferential: number;
   gamesPlayed: number;
   streak: string;
-  conferenceRecord?: string;
-  divisionRecord?: string;
-  lastFive?: string;
   playoffSeed?: number;
 }
 
@@ -263,15 +203,21 @@ export interface ManagerCareerSummary {
   displayName: string;
   slug: string;
   currentTeam?: TeamSummary;
+  careerGames: number;
   careerWins: number;
   careerLosses: number;
   careerTies: number;
   careerWinPercentage: number;
+  careerPointsFor: number;
+  careerPointsAgainst: number;
+  careerPointDifferential: number;
   careerPlayoffWins: number;
   careerPlayoffLosses: number;
+  championshipAppearances: number;
   championships: number;
-  runnerUpFinishes: number;
   seasonsPlayed: number;
+  currentStreak: string;
+  longestWinStreak: number;
   currentSeasonRecord?: {
     wins: number;
     losses: number;
@@ -307,16 +253,12 @@ export interface GameSummary {
   overtime?: boolean;
   recap?: string;
   featuredGame?: boolean;
-  publicNotes?: string;
 }
 
 export type StatCategory = 'passing' | 'rushing' | 'receiving' | 'defense' | 'team' | 'manager';
-export type DefenseSubCategory =
-  | 'sacks' | 'interceptions' | 'forcedFumbles' | 'fumbleRecoveries' | 'defensiveTouchdowns' | 'tackles';
 
 export interface PlayerLeaderboardEntry {
   rank: number;
-  playerId: string;
   playerName: string;
   position: PlayerPosition;
   team: TeamSummary;
@@ -330,21 +272,20 @@ export interface PlayerLeaderboardEntry {
   passingYards?: number;
   passingTouchdowns?: number;
   interceptions?: number;
-  passerRating?: number;
 
   // Rushing
-  rushingAttempts?: number;
+  rushAttempts?: number;
   rushingYards?: number;
   yardsPerAttempt?: number;
   rushingTouchdowns?: number;
-  longestRush?: number;
+  longRush?: number;
 
   // Receiving
   receptions?: number;
   receivingYards?: number;
   yardsPerReception?: number;
   receivingTouchdowns?: number;
-  longestReception?: number;
+  longReception?: number;
 
   // Defense
   sacks?: number;
@@ -369,6 +310,7 @@ export interface TeamLeaderboardEntry {
   takeawaysPerGame: number;
   turnoverDifferential: number;
   sacksPerGame: number;
+  tacklesPerGame: number;
 }
 
 export interface ManagerStatsEntry {
@@ -403,9 +345,6 @@ export interface LeagueDataset {
   teams: Team[];
   seasonEntries: SeasonEntry[];
   games: Game[];
-  teamGameStats: TeamGameStats[];
-  players: Player[];
-  playerGameStats: PlayerGameStats[];
+  playerStats: PlayerStats[];
   news: NewsArticle[];
-  powerRankings: PowerRanking[];
 }

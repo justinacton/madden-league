@@ -1,9 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import type { Game, Manager, PlayerGameStats, Season, SeasonEntry, Team, TeamGameStats } from '../src/lib/types';
+import type { Game, Manager, PlayerStats, Season, SeasonEntry, Team } from '../src/lib/types';
 import {
   computeAllManagerCareerSummaries,
   computeDefenseLeaderboard,
   computeHeadToHead,
+  computeLongestWinStreak,
+  computeManagerCurrentStreak,
   computePassingLeaderboard,
   computePointDifferential,
   computePointsAllowedPerGame,
@@ -37,7 +39,12 @@ const managerM1: Manager = { id: 'm1', displayName: 'Jordan', slug: 'jordan', ac
 const managerM2: Manager = { id: 'm2', displayName: 'Casey', slug: 'casey', active: true };
 const managers: Manager[] = [managerM1, managerM2];
 
-const season1: Season = { id: 's1', name: 'Season 1', status: 'Completed', public: true };
+// m2 wins the Season 1 championship, m1 is runner-up — used by the career
+// summary tests below (championships / championship appearances).
+const season1: Season = {
+  id: 's1', name: 'Season 1', status: 'Completed', public: true,
+  championManagerId: 'm2', runnerUpManagerId: 'm1',
+};
 const season2: Season = { id: 's2', name: 'Season 2', status: 'Active', public: true };
 const seasons: Season[] = [season1, season2];
 
@@ -167,6 +174,26 @@ describe('computeStreak', () => {
   });
 });
 
+describe('career-wide manager streaks', () => {
+  const regularSeason = filterFinalRegularSeasonGames(allGames);
+  const m1EntryIds = new Set(['e1', 'e3']);
+
+  it('follows the manager across a team change for the current streak', () => {
+    // m1 chronologically: W (g1), T (g2), L (g3), W (g4), W (g5) -> current streak is 2 wins.
+    expect(computeManagerCurrentStreak(regularSeason, m1EntryIds)).toBe('W2');
+  });
+
+  it('finds the longest win streak across a career, not just the current season', () => {
+    // Win runs are [g1] (length 1) and [g4, g5] (length 2) -> longest is 2.
+    expect(computeLongestWinStreak(regularSeason, m1EntryIds)).toBe(2);
+  });
+
+  it('returns a placeholder current streak and zero longest streak with no games', () => {
+    expect(computeManagerCurrentStreak([], m1EntryIds)).toBe('-');
+    expect(computeLongestWinStreak([], m1EntryIds)).toBe(0);
+  });
+});
+
 describe('computeStandings', () => {
   const standings = computeStandings('s1', { seasonEntries, games: allGames, teams, managers });
 
@@ -187,7 +214,7 @@ describe('manager career records across team changes', () => {
 
   it('aggregates regular-season wins/losses/ties across both teams the manager used', () => {
     // Season 1 (Team A): 1W-1L-1T. Season 2 (Team B): 2W-0L-0T. Career: 3W-1L-1T.
-    expect(m1Summary).toMatchObject({ careerWins: 3, careerLosses: 1, careerTies: 1, seasonsPlayed: 2 });
+    expect(m1Summary).toMatchObject({ careerWins: 3, careerLosses: 1, careerTies: 1, careerGames: 5, seasonsPlayed: 2 });
   });
 
   it('tracks playoff wins separately from regular-season wins', () => {
@@ -197,6 +224,17 @@ describe('manager career records across team changes', () => {
 
   it('reflects the manager\'s current team for the requested season', () => {
     expect(m1Summary?.currentTeam?.id).toBe('teamB');
+  });
+
+  it('counts championship appearances (champion or runner-up) separately from championships won', () => {
+    // m1 was the Season 1 runner-up, not the champion.
+    expect(m1Summary?.championships).toBe(0);
+    expect(m1Summary?.championshipAppearances).toBe(1);
+  });
+
+  it('includes the career-wide current and longest win streaks', () => {
+    expect(m1Summary?.currentStreak).toBe('W2');
+    expect(m1Summary?.longestWinStreak).toBe(2);
   });
 });
 
@@ -209,87 +247,93 @@ describe('head-to-head manager records', () => {
 });
 
 describe('player season totals and rate stats', () => {
-  const players = [
-    { id: 'p1', fullName: 'Pat Passer', position: 'QB' as const },
-    { id: 'p2', fullName: 'Rae Rusher', position: 'RB' as const },
-    { id: 'p3', fullName: 'Wes Wideout', position: 'WR' as const },
-    { id: 'p4', fullName: 'Del Fender', position: 'CB' as const },
-  ];
-
-  const playerGameStats: PlayerGameStats[] = [
-    { id: 'pg1', gameId: 'g1', seasonId: 's1', week: 1, playerId: 'p1', position: 'QB', seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', gamesPlayedValue: 1, passCompletions: 20, passAttempts: 30, passingYards: 250, passingTouchdowns: 2, interceptionsThrown: 1 },
-    { id: 'pg2', gameId: 'g2', seasonId: 's1', week: 2, playerId: 'p1', position: 'QB', seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', gamesPlayedValue: 1, passCompletions: 15, passAttempts: 25, passingYards: 180, passingTouchdowns: 1, interceptionsThrown: 0 },
-    { id: 'pg3', gameId: 'g3', seasonId: 's1', week: 3, playerId: 'p1', position: 'QB', seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', gamesPlayedValue: 1, passCompletions: 10, passAttempts: 20, passingYards: 90, passingTouchdowns: 0, interceptionsThrown: 2 },
-    { id: 'pg4', gameId: 'g1', seasonId: 's1', week: 1, playerId: 'p2', position: 'RB', seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', gamesPlayedValue: 1, rushingAttempts: 10, rushingYards: 50 },
-    { id: 'pg5', gameId: 'g2', seasonId: 's1', week: 2, playerId: 'p2', position: 'RB', seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', gamesPlayedValue: 1, rushingAttempts: 8, rushingYards: 32 },
-    { id: 'pg6', gameId: 'g1', seasonId: 's1', week: 1, playerId: 'p3', position: 'WR', seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', gamesPlayedValue: 1, receptions: 5, receivingYards: 80 },
-    { id: 'pg7', gameId: 'g2', seasonId: 's1', week: 2, playerId: 'p3', position: 'WR', seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', gamesPlayedValue: 1, receptions: 3, receivingYards: 20 },
-    { id: 'pg8', gameId: 'g1', seasonId: 's1', week: 1, playerId: 'p4', position: 'CB', seasonEntryId: 'e2', teamId: 'teamB', managerId: 'm2', gamesPlayedValue: 1, interceptions: 1, sacks: 0.5 },
+  const playerStats: PlayerStats[] = [
+    { id: 'pg1', gameId: 'g1', seasonId: 's1', week: 1, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', playerName: 'Pat Passer', position: 'QB', passCompletions: 20, passAttempts: 30, passingYards: 250, passingTouchdowns: 2, interceptionsThrown: 1 },
+    { id: 'pg2', gameId: 'g2', seasonId: 's1', week: 2, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', playerName: 'Pat Passer', position: 'QB', passCompletions: 15, passAttempts: 25, passingYards: 180, passingTouchdowns: 1, interceptionsThrown: 0 },
+    { id: 'pg3', gameId: 'g3', seasonId: 's1', week: 3, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', playerName: 'Pat Passer', position: 'QB', passCompletions: 10, passAttempts: 20, passingYards: 90, passingTouchdowns: 0, interceptionsThrown: 2 },
+    { id: 'pg4', gameId: 'g1', seasonId: 's1', week: 1, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', playerName: 'Rae Rusher', position: 'RB', rushAttempts: 10, rushingYards: 50 },
+    { id: 'pg5', gameId: 'g2', seasonId: 's1', week: 2, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', playerName: 'Rae Rusher', position: 'RB', rushAttempts: 8, rushingYards: 32 },
+    { id: 'pg6', gameId: 'g1', seasonId: 's1', week: 1, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', playerName: 'Wes Wideout', position: 'WR', receptions: 5, receivingYards: 80 },
+    { id: 'pg7', gameId: 'g2', seasonId: 's1', week: 2, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', playerName: 'Wes Wideout', position: 'WR', receptions: 3, receivingYards: 20 },
+    { id: 'pg8', gameId: 'g1', seasonId: 's1', week: 1, seasonEntryId: 'e2', teamId: 'teamB', managerId: 'm2', playerName: 'Del Fender', position: 'CB', interceptions: 1, sacks: 0.5 },
     // Exhibition-game stat line should be excluded entirely from season totals.
-    { id: 'pg9', gameId: 'g7', seasonId: 's1', week: 0, playerId: 'p1', position: 'QB', seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', gamesPlayedValue: 1, passCompletions: 99, passAttempts: 99, passingYards: 999 },
+    { id: 'pg9', gameId: 'g7', seasonId: 's1', week: 0, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', playerName: 'Pat Passer', position: 'QB', passCompletions: 99, passAttempts: 99, passingYards: 999 },
   ];
 
-  const input = { playerGameStats, players, seasonEntries, teams, managers, games: allGames };
+  const input = { playerStats, seasonEntries, teams, managers, games: allGames };
 
-  it('sums passing totals by season and computes completion percentage', () => {
+  it('sums passing totals by season, computes completion percentage, and counts distinct games played', () => {
     const leaders = computePassingLeaderboard('s1', input);
-    const pat = leaders.find((l) => l.playerId === 'p1');
-    expect(pat).toMatchObject({ completions: 45, attempts: 75, passingYards: 520, passingTouchdowns: 3, interceptions: 3 });
+    const pat = leaders.find((l) => l.playerName === 'Pat Passer');
+    expect(pat).toMatchObject({ completions: 45, attempts: 75, passingYards: 520, passingTouchdowns: 3, interceptions: 3, games: 3 });
     expect(pat?.completionPercentage).toBeCloseTo(60, 5);
   });
 
   it('computes rushing yards per attempt', () => {
     const leaders = computeRushingLeaderboard('s1', input);
-    const rae = leaders.find((l) => l.playerId === 'p2');
+    const rae = leaders.find((l) => l.playerName === 'Rae Rusher');
     expect(rae?.rushingYards).toBe(82);
     expect(rae?.yardsPerAttempt).toBeCloseTo(82 / 18, 5);
   });
 
   it('computes receiving yards per reception', () => {
     const leaders = computeReceivingLeaderboard('s1', input);
-    const wes = leaders.find((l) => l.playerId === 'p3');
+    const wes = leaders.find((l) => l.playerName === 'Wes Wideout');
     expect(wes?.receivingYards).toBe(100);
     expect(wes?.yardsPerReception).toBeCloseTo(12.5, 5);
   });
 
   it('ranks a defensive category leaderboard', () => {
     const leaders = computeDefenseLeaderboard('s1', 'interceptions', input);
-    expect(leaders[0]).toMatchObject({ playerId: 'p4', interceptions: 1 });
+    expect(leaders[0]).toMatchObject({ playerName: 'Del Fender', interceptions: 1 });
   });
 
   it('avoids division by zero when a player has zero attempts/receptions', () => {
     const noAttempts = computeRushingLeaderboard('s1', {
       ...input,
-      playerGameStats: [
-        { id: 'pgX', gameId: 'g1', seasonId: 's1', week: 1, playerId: 'p2', position: 'RB', seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', gamesPlayedValue: 1, rushingAttempts: 0, rushingYards: 0 },
+      playerStats: [
+        { id: 'pgX', gameId: 'g1', seasonId: 's1', week: 1, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', playerName: 'Rae Rusher', position: 'RB', rushAttempts: 0, rushingYards: 0 },
       ],
     });
     expect(noAttempts).toEqual([]);
     expect(safeDivide(82, 0)).toBe(0);
   });
+
+  it('is not fooled by a duplicate stat row for the same game (still counts one distinct game)', () => {
+    const duplicated = [...playerStats, { ...playerStats[0]!, id: 'pg1-duplicate' }];
+    const leaders = computePassingLeaderboard('s1', { ...input, playerStats: duplicated });
+    const pat = leaders.find((l) => l.playerName === 'Pat Passer');
+    expect(pat?.games).toBe(3);
+  });
 });
 
-describe('team leaderboard and turnover differential', () => {
-  const teamGameStats: TeamGameStats[] = [
-    { id: 'tg1', gameId: 'g1', seasonId: 's1', week: 1, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', points: 28, totalOffenseYards: 400, passingYards: 250, rushingYards: 150, turnovers: 1, takeaways: 2, defensiveSacks: 3 },
-    { id: 'tg2', gameId: 'g2', seasonId: 's1', week: 2, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', points: 20, totalOffenseYards: 300, passingYards: 180, rushingYards: 120, turnovers: 2, takeaways: 1, defensiveSacks: 1 },
-    { id: 'tg3', gameId: 'g3', seasonId: 's1', week: 3, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', points: 10, totalOffenseYards: 250, passingYards: 90, rushingYards: 160, turnovers: 3, takeaways: 0, defensiveSacks: 2 },
+describe('team leaderboard — calculated from Games + Player Stats, no Team Stats table', () => {
+  const playerStats: PlayerStats[] = [
+    { id: 'pg1', gameId: 'g1', seasonId: 's1', week: 1, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', playerName: 'Pat Passer', position: 'QB', passingYards: 250, interceptionsThrown: 1 },
+    { id: 'pg2', gameId: 'g2', seasonId: 's1', week: 2, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', playerName: 'Pat Passer', position: 'QB', passingYards: 180, interceptionsThrown: 0 },
+    { id: 'pg3', gameId: 'g3', seasonId: 's1', week: 3, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', playerName: 'Pat Passer', position: 'QB', passingYards: 90, interceptionsThrown: 2 },
+    { id: 'pg4', gameId: 'g1', seasonId: 's1', week: 1, seasonEntryId: 'e1', teamId: 'teamA', managerId: 'm1', playerName: 'Rae Rusher', position: 'RB', rushingYards: 150 },
   ];
+  const input = { seasonEntries, games: allGames, playerStats, teams, managers };
 
-  const input = { seasonEntries, games: allGames, teamGameStats, teams, managers };
-
-  it('computes points per game and turnover differential', () => {
+  it('sums points from Games and yards/turnovers from Player Stats', () => {
     const leaderboard = computeTeamLeaderboard('s1', input);
     const teamAEntry = leaderboard.find((entry) => entry.team.id === 'teamA');
+    // Points come from Games (g1: 28, g2: 20, g3: 10 for Team A) regardless of Player Stats.
+    expect(teamAEntry?.games).toBe(3);
     expect(teamAEntry?.pointsPerGame).toBeCloseTo(58 / 3, 5);
-    expect(teamAEntry?.turnoverDifferential).toBe(3 - 6);
+    // Turnovers: 1 + 0 + 2 = 3 interceptions thrown, no takeaways recorded for Team A.
+    expect(teamAEntry?.turnoverDifferential).toBe(0 - 3);
+    expect(teamAEntry?.passingYardsPerGame).toBeCloseTo((250 + 180 + 90) / 3, 5);
+    expect(teamAEntry?.rushingYardsPerGame).toBeCloseTo(150 / 3, 5);
   });
 
-  it('returns zeroed rates for a team with no recorded stats', () => {
-    const leaderboard = computeTeamLeaderboard('s1', { ...input, teamGameStats: [] });
+  it('still reports games played from the Games table even when no Player Stats rows exist yet', () => {
+    const leaderboard = computeTeamLeaderboard('s1', { ...input, playerStats: [] });
     const teamAEntry = leaderboard.find((entry) => entry.team.id === 'teamA');
-    expect(teamAEntry?.pointsPerGame).toBe(0);
-    expect(teamAEntry?.games).toBe(0);
+    expect(teamAEntry?.games).toBe(3);
+    expect(teamAEntry?.pointsPerGame).toBeCloseTo(58 / 3, 5);
+    expect(teamAEntry?.passingYardsPerGame).toBe(0);
   });
 });
 

@@ -82,10 +82,8 @@ const isFinal = detail?.game.status === 'Final';
                       ['Total Offense', detail.awayStats?.totalOffenseYards, detail.homeStats?.totalOffenseYards],
                       ['Passing Yards', detail.awayStats?.passingYards, detail.homeStats?.passingYards],
                       ['Rushing Yards', detail.awayStats?.rushingYards, detail.homeStats?.rushingYards],
-                      ['First Downs', detail.awayStats?.firstDowns, detail.homeStats?.firstDowns],
                       ['Turnovers', detail.awayStats?.turnovers, detail.homeStats?.turnovers],
-                      ['Sacks Allowed', detail.awayStats?.sacksAllowed, detail.homeStats?.sacksAllowed],
-                      ['Defensive Sacks', detail.awayStats?.defensiveSacks, detail.homeStats?.defensiveSacks],
+                      ['Sacks', detail.awayStats?.sacks, detail.homeStats?.sacks],
                     ].map(([label, away, home]) => (
                       <tr>
                         <td class="numeric">{away ?? '-'}</td>
