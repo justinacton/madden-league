@@ -10,9 +10,7 @@ export interface Env {
   AIRTABLE_API_URL?: string;
 }
 
+/** Mock mode is opt-in only: anything other than the exact string "true" means use Airtable. */
 export function isMockMode(env: Env): boolean {
-  if (env.USE_MOCK_DATA === 'true') return true;
-  if (env.USE_MOCK_DATA === 'false') return Boolean(env.AIRTABLE_TOKEN && env.AIRTABLE_BASE_ID) ? false : true;
-  // No explicit flag: fall back to mock data unless real Airtable credentials are present.
-  return !env.AIRTABLE_TOKEN || !env.AIRTABLE_BASE_ID;
+  return env.USE_MOCK_DATA === 'true';
 }

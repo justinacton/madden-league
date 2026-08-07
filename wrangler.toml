@@ -3,9 +3,11 @@ compatibility_date = "2024-11-01"
 compatibility_flags = ["nodejs_compat"]
 pages_build_output_dir = "dist"
 
+# These vars apply to `wrangler pages dev` (npm run preview) and to production
+# Cloudflare Pages — NOT to `npm run dev` (astro dev), which reads .env instead.
 # Non-secret vars can live here; secrets (AIRTABLE_TOKEN) must be set with
 # `wrangler pages secret put AIRTABLE_TOKEN` for production, or in `.dev.vars`
-# (gitignored) for local dev via `astro dev` / `wrangler pages dev`.
+# (gitignored) for `wrangler pages dev`.
 [vars]
 USE_MOCK_DATA = "false"
 AIRTABLE_BASE_ID = "appZSCWfIrrSkQABA"
