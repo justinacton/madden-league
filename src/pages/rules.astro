@@ -1,0 +1,40 @@
+---
+import Layout from '../layouts/Layout.astro';
+import { leagueSettings, ruleSections } from '../content/rules';
+---
+<Layout title="Rules" description="League settings and house rules.">
+  <div class="container page-section">
+    <h1>League Rules</h1>
+    <p>These rules are maintained directly in the website source code by the commissioner, not in Airtable.</p>
+
+    <div class="section-heading"><h2>League Settings</h2></div>
+    <div class="table-scroll" style="margin-bottom: var(--space-6);">
+      <table class="data-table responsive-cards">
+        <thead>
+          <tr>
+            <th scope="col">Setting</th>
+            <th scope="col">Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {leagueSettings.map((setting) => (
+            <tr>
+              <td data-label="Setting">{setting.label}</td>
+              <td data-label="Value">{setting.value}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+
+    <div class="section-heading"><h2>House Rules</h2></div>
+    <div class="stack">
+      {ruleSections.map((section) => (
+        <div class="panel panel-pad">
+          <h3>{section.title}</h3>
+          <p>{section.content}</p>
+        </div>
+      ))}
+    </div>
+  </div>
+</Layout>

@@ -1,0 +1,14 @@
+---
+// Note: the 404 status must be set in the *page's* top-level frontmatter,
+// before Layout starts streaming output — setting it here, in a component
+// nested inside <Layout>'s slot, is too late for the adapter to pick up.
+interface Props {
+  message?: string;
+}
+const { message = "We couldn't find what you were looking for." } = Astro.props;
+---
+<div class="container page-section">
+  <h1>Not Found</h1>
+  <p>{message}</p>
+  <p><a href="/">Return home</a></p>
+</div>

@@ -1,0 +1,40 @@
+---
+interface Props {
+  label: string;
+  value?: string;
+  meta?: string;
+  href?: string;
+  logoUrl?: string;
+}
+
+const { label, value, meta, href, logoUrl } = Astro.props;
+const hasData = value !== undefined && value !== null && value !== '';
+---
+{hasData && href ? (
+  <a class="stat-card" href={href}>
+    <span class="stat-label">{label}</span>
+    <span class="stat-value">{value}</span>
+    {meta && (
+      <span class="stat-meta">
+        {logoUrl && <img class="team-logo-sm" src={logoUrl} alt="" loading="lazy" />}
+        {meta}
+      </span>
+    )}
+  </a>
+) : hasData ? (
+  <div class="stat-card">
+    <span class="stat-label">{label}</span>
+    <span class="stat-value">{value}</span>
+    {meta && (
+      <span class="stat-meta">
+        {logoUrl && <img class="team-logo-sm" src={logoUrl} alt="" loading="lazy" />}
+        {meta}
+      </span>
+    )}
+  </div>
+) : (
+  <div class="stat-card empty">
+    <span class="stat-label">{label}</span>
+    <span>No stats available.</span>
+  </div>
+)}

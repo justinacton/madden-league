@@ -1,0 +1,20 @@
+---
+import { formatFullDate } from '../lib/formatting';
+import type { NewsArticle } from '../lib/types';
+
+interface Props {
+  article: NewsArticle;
+}
+
+const { article } = Astro.props;
+---
+<article class="card news-card">
+  {article.featuredImageUrl && <img src={article.featuredImageUrl} alt="" loading="lazy" />}
+  <span class="meta">
+    {formatFullDate(article.publishDate)}
+    {article.week !== undefined ? ` · Week ${article.week}` : ''}
+  </span>
+  <h3><a href={`/news/${article.slug}`}>{article.title}</a></h3>
+  <p>{article.summary}</p>
+  <a href={`/news/${article.slug}`}>Read more &rarr;</a>
+</article>

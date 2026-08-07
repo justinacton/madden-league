@@ -1,0 +1,263 @@
+---
+import Layout from '../layouts/Layout.astro';
+import StandingsTable from '../components/StandingsTable.astro';
+import GameCard from '../components/GameCard.astro';
+import LeaderCard from '../components/LeaderCard.astro';
+import NewsCard from '../components/NewsCard.astro';
+import { getHomeDashboard, LeagueDataUnavailableError } from '../lib/api';
+import { getRuntimeEnv } from '../lib/envAstro';
+import { formatAverage } from '../lib/formatting';
+
+const env = getRuntimeEnv(Astro.locals);
+const bypassCache = Astro.url.searchParams.get('bypassCache') === '1';
+
+let dashboard: Awaited<ReturnType<typeof getHomeDashboard>> = null;
+let unavailable = false;
+try {
+  dashboard = await getHomeDashboard(env, { bypassCache });
+} catch (error) {
+  unavailable = error instanceof LeagueDataUnavailableError;
+}
+---
+<Layout
+  title="PUNT"
+  description="Standings, schedule, stats, and news for PUNT — the Professional Union of Nonexistent Talent."
+  currentSeasonId={dashboard?.season.id}
+>
+  {unavailable && (
+    <div class="container page-section">
+      <p class="error-banner" role="alert">League data is temporarily unavailable. Please check back shortly.</p>
+    </div>
+  )}
+
+  {!unavailable && !dashboard && (
+    <div class="container page-section">
+      <p class="empty-state">No seasons have been published yet. Check back soon.</p>
+    </div>
+  )}
+
+  {dashboard && (
+    <>
+      <section class="page-section">
+        <div class="container">
+          <p class="text-muted text-small" style="text-transform:uppercase; letter-spacing:0.06em; font-weight:700;">
+            {dashboard.season.status === 'Active' ? 'Current Season' : 'Most Recent Season'}
+          </p>
+          <h1>{dashboard.season.name}{dashboard.season.maddenVersion ? ` — ${dashboard.season.maddenVersion}` : ''}</h1>
+          <p class="cluster">
+            {dashboard.season.currentWeek !== undefined && <span class="pill pill-scheduled">Week {dashboard.season.currentWeek}</span>}
+            <span class="pill pill-final">{dashboard.managerCount} Managers</span>
+            <span class="pill pill-final">{dashboard.season.status}</span>
+          </p>
+        </div>
+      </section>
+
+      <section class="page-section">
+        <div class="container">
+          <div class="section-heading"><h2>Featured Rankings</h2></div>
+          <div class="grid grid-4">
+            <LeaderCard
+              label="#1 Team"
+              value={dashboard.numberOneTeam ? dashboard.numberOneTeam.team.name : undefined}
+              meta={dashboard.numberOneTeam ? `${dashboard.numberOneTeam.wins}-${dashboard.numberOneTeam.losses} · ${dashboard.numberOneTeam.manager.name}` : undefined}
+              logoUrl={dashboard.numberOneTeam?.team.logoUrl}
+              href={dashboard.numberOneTeam ? `/teams/${dashboard.numberOneTeam.team.slug}` : undefined}
+            />
+            <LeaderCard
+              label="#1 Offense"
+              value={dashboard.numberOneOffense ? `${formatAverage(dashboard.numberOneOffense.pointsPerGame)} PPG` : undefined}
+              meta={dashboard.numberOneOffense ? dashboard.numberOneOffense.team.name : undefined}
+              logoUrl={dashboard.numberOneOffense?.team.logoUrl}
+              href={dashboard.numberOneOffense ? `/teams/${dashboard.numberOneOffense.team.slug}` : undefined}
+            />
+            <LeaderCard
+              label="#1 Defense"
+              value={dashboard.numberOneDefense ? `${formatAverage(dashboard.numberOneDefense.pointsAllowedPerGame)} PAPG` : undefined}
+              meta={dashboard.numberOneDefense ? dashboard.numberOneDefense.team.name : undefined}
+              logoUrl={dashboard.numberOneDefense?.team.logoUrl}
+              href={dashboard.numberOneDefense ? `/teams/${dashboard.numberOneDefense.team.slug}` : undefined}
+            />
+            <LeaderCard
+              label="Passing Leader"
+              value={dashboard.passingLeader ? `${dashboard.passingLeader.passingYards} yds` : undefined}
+              meta={dashboard.passingLeader ? `${dashboard.passingLeader.playerName} · ${dashboard.passingLeader.team.abbreviation}` : undefined}
+              logoUrl={dashboard.passingLeader?.team.logoUrl}
+              href={`/seasons/${dashboard.season.id}/stats?category=passing`}
+            />
+            <LeaderCard
+              label="Rushing Leader"
+              value={dashboard.rushingLeader ? `${dashboard.rushingLeader.rushingYards} yds` : undefined}
+              meta={dashboard.rushingLeader ? `${dashboard.rushingLeader.playerName} · ${dashboard.rushingLeader.team.abbreviation}` : undefined}
+              logoUrl={dashboard.rushingLeader?.team.logoUrl}
+              href={`/seasons/${dashboard.season.id}/stats?category=rushing`}
+            />
+            <LeaderCard
+              label="Receiving Leader"
+              value={dashboard.receivingLeader ? `${dashboard.receivingLeader.receivingYards} yds` : undefined}
+              meta={dashboard.receivingLeader ? `${dashboard.receivingLeader.playerName} · ${dashboard.receivingLeader.team.abbreviation}` : undefined}
+              logoUrl={dashboard.receivingLeader?.team.logoUrl}
+              href={`/seasons/${dashboard.season.id}/stats?category=receiving`}
+            />
+            <LeaderCard
+              label="Sack Leader"
+              value={dashboard.sackLeader ? `${dashboard.sackLeader.sacks} sacks` : undefined}
+              meta={dashboard.sackLeader ? `${dashboard.sackLeader.playerName} · ${dashboard.sackLeader.team.abbreviation}` : undefined}
+              logoUrl={dashboard.sackLeader?.team.logoUrl}
+              href={`/seasons/${dashboard.season.id}/stats?category=defense`}
+            />
+            <LeaderCard
+              label="Interception Leader"
+              value={dashboard.interceptionLeader ? `${dashboard.interceptionLeader.interceptions} INT` : undefined}
+              meta={dashboard.interceptionLeader ? `${dashboard.interceptionLeader.playerName} · ${dashboard.interceptionLeader.team.abbreviation}` : undefined}
+              logoUrl={dashboard.interceptionLeader?.team.logoUrl}
+              href={`/seasons/${dashboard.season.id}/stats?category=defense`}
+            />
+          </div>
+        </div>
+      </section>
+
+      <section class="page-section">
+        <div class="container">
+          <div class="section-heading">
+            <h2>Standings</h2>
+            <a href={`/seasons/${dashboard.season.id}/standings`}>Full standings &rarr;</a>
+          </div>
+          <StandingsTable standings={dashboard.standingsPreview} />
+        </div>
+      </section>
+
+      <section class="page-section">
+        <div class="container">
+          <div class="section-heading">
+            <h2>Week {dashboard.season.currentWeek ?? 1} Schedule</h2>
+            <a href={`/seasons/${dashboard.season.id}/schedule`}>Full schedule &rarr;</a>
+          </div>
+          {dashboard.currentWeekGames.length === 0 ? (
+            <p class="empty-state">No games have been scheduled for this week.</p>
+          ) : (
+            <div class="grid grid-2">
+              {dashboard.currentWeekGames.map((game) => <GameCard game={game} />)}
+            </div>
+          )}
+        </div>
+      </section>
+
+      {dashboard.recentResults.length > 0 && (
+        <section class="page-section">
+          <div class="container">
+            <div class="section-heading"><h2>Recent Results</h2></div>
+            <div class="grid grid-2">
+              {dashboard.recentResults.map((game) => <GameCard game={game} />)}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section class="page-section">
+        <div class="container">
+          <div class="section-heading">
+            <h2>League Leaders</h2>
+            <a href={`/seasons/${dashboard.season.id}/stats`}>All stats &rarr;</a>
+          </div>
+          <div class="grid grid-3">
+            <div class="card">
+              <h4>Passing Yards</h4>
+              {dashboard.leagueLeaders.passing.length === 0 ? <p>No stats available.</p> : (
+                <ol class="mt-0">
+                  {dashboard.leagueLeaders.passing.map((p) => <li>{p.playerName} — {p.passingYards} yds</li>)}
+                </ol>
+              )}
+            </div>
+            <div class="card">
+              <h4>Rushing Yards</h4>
+              {dashboard.leagueLeaders.rushing.length === 0 ? <p>No stats available.</p> : (
+                <ol class="mt-0">
+                  {dashboard.leagueLeaders.rushing.map((p) => <li>{p.playerName} — {p.rushingYards} yds</li>)}
+                </ol>
+              )}
+            </div>
+            <div class="card">
+              <h4>Receiving Yards</h4>
+              {dashboard.leagueLeaders.receiving.length === 0 ? <p>No stats available.</p> : (
+                <ol class="mt-0">
+                  {dashboard.leagueLeaders.receiving.map((p) => <li>{p.playerName} — {p.receivingYards} yds</li>)}
+                </ol>
+              )}
+            </div>
+            <div class="card">
+              <h4>Sacks</h4>
+              {dashboard.leagueLeaders.sacks.length === 0 ? <p>No stats available.</p> : (
+                <ol class="mt-0">
+                  {dashboard.leagueLeaders.sacks.map((p) => <li>{p.playerName} — {p.sacks} sacks</li>)}
+                </ol>
+              )}
+            </div>
+            <div class="card">
+              <h4>Interceptions</h4>
+              {dashboard.leagueLeaders.interceptions.length === 0 ? <p>No stats available.</p> : (
+                <ol class="mt-0">
+                  {dashboard.leagueLeaders.interceptions.map((p) => <li>{p.playerName} — {p.interceptions} INT</li>)}
+                </ol>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="page-section">
+        <div class="container">
+          <div class="grid grid-2">
+            <div>
+              <div class="section-heading">
+                <h2>Latest News</h2>
+                <a href="/news">All news &rarr;</a>
+              </div>
+              {dashboard.news.length === 0 ? <p class="empty-state">No news articles have been published yet.</p> : (
+                <div class="stack">
+                  {dashboard.news.map((article) => <NewsCard article={article} />)}
+                </div>
+              )}
+            </div>
+            <div>
+              <div class="section-heading"><h2>Power Rankings</h2></div>
+              {dashboard.powerRankings.length === 0 ? <p class="empty-state">No power rankings have been published yet.</p> : (
+                <div class="table-scroll">
+                  <table class="data-table responsive-cards">
+                    <thead>
+                      <tr>
+                        <th scope="col">Rank</th>
+                        <th scope="col" class="team-cell">Team</th>
+                        <th scope="col">Move</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dashboard.powerRankings.map((ranking) => {
+                        const movement = ranking.previousRank !== undefined ? ranking.previousRank - ranking.rank : 0;
+                        return (
+                          <tr>
+                            <td data-label="Rank">{ranking.rank}</td>
+                            <td data-label="Team" class="team-cell">
+                              <a class="team-link" href={`/teams/${ranking.team.slug}`}>
+                                <img class="team-logo-sm" src={ranking.team.logoUrl} alt="" loading="lazy" />
+                                {ranking.team.name}
+                              </a>
+                            </td>
+                            <td data-label="Move">
+                              {movement > 0 && <span>&#9650; {movement}</span>}
+                              {movement < 0 && <span>&#9660; {Math.abs(movement)}</span>}
+                              {movement === 0 && <span>&mdash; No change</span>}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </section>
+    </>
+  )}
+</Layout>

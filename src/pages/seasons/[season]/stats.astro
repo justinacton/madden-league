@@ -1,0 +1,168 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import NotFound from '../../../components/NotFound.astro';
+import PlayerStatTable from '../../../components/stats/PlayerStatTable.astro';
+import TeamStatTable from '../../../components/stats/TeamStatTable.astro';
+import ManagerStatTable from '../../../components/stats/ManagerStatTable.astro';
+import {
+  getDefenseStats,
+  getManagerLeaderboard,
+  getManagerSeasonStats,
+  getPassingStats,
+  getReceivingStats,
+  getRushingStats,
+  getSeason,
+  getTeamStats,
+  LeagueDataUnavailableError,
+} from '../../../lib/api';
+import { getRuntimeEnv } from '../../../lib/envAstro';
+import type { DefenseCategory } from '../../../lib/calculations';
+
+const { season: seasonId } = Astro.params;
+const env = getRuntimeEnv(Astro.locals);
+const params = Astro.url.searchParams;
+
+const category = (params.get('category') ?? 'passing') as
+  | 'passing' | 'rushing' | 'receiving' | 'defense' | 'team' | 'manager';
+const defenseCategory = (params.get('sub') ?? 'sacks') as DefenseCategory;
+const managerMode = (params.get('mode') ?? 'season') as 'season' | 'career';
+
+let season = null;
+let unavailable = false;
+let passing: Awaited<ReturnType<typeof getPassingStats>> = [];
+let rushing: Awaited<ReturnType<typeof getRushingStats>> = [];
+let receiving: Awaited<ReturnType<typeof getReceivingStats>> = [];
+let defense: Awaited<ReturnType<typeof getDefenseStats>> = [];
+let team: Awaited<ReturnType<typeof getTeamStats>> = [];
+let managerSeason: Awaited<ReturnType<typeof getManagerSeasonStats>> = [];
+let managerCareer: Awaited<ReturnType<typeof getManagerLeaderboard>> = [];
+let lastUpdated = new Date().toISOString();
+
+try {
+  season = seasonId ? await getSeason(env, seasonId) : null;
+  if (season) {
+    if (category === 'passing') passing = await getPassingStats(env, season.id);
+    else if (category === 'rushing') rushing = await getRushingStats(env, season.id);
+    else if (category === 'receiving') receiving = await getReceivingStats(env, season.id);
+    else if (category === 'defense') defense = await getDefenseStats(env, season.id, defenseCategory);
+    else if (category === 'team') team = await getTeamStats(env, season.id);
+    else if (category === 'manager') {
+      if (managerMode === 'career') managerCareer = await getManagerLeaderboard(env);
+      else managerSeason = await getManagerSeasonStats(env, season.id);
+    }
+  }
+} catch (error) {
+  unavailable = error instanceof LeagueDataUnavailableError;
+}
+if (!season && !unavailable) Astro.response.status = 404;
+
+function tabHref(cat: string): string {
+  const next = new URLSearchParams();
+  next.set('category', cat);
+  return `?${next.toString()}`;
+}
+
+const defenseCategories: { key: DefenseCategory; label: string }[] = [
+  { key: 'sacks', label: 'Sacks' },
+  { key: 'interceptions', label: 'Interceptions' },
+  { key: 'forcedFumbles', label: 'Forced Fumbles' },
+  { key: 'fumbleRecoveries', label: 'Fumble Recoveries' },
+  { key: 'defensiveTouchdowns', label: 'Defensive TDs' },
+  { key: 'tackles', label: 'Tackles' },
+];
+---
+{!season && !unavailable ? (
+  <Layout title="Season Not Found" description="This season could not be found." noindex>
+    <NotFound message="That season doesn't exist. It may have been removed or the link is incorrect." />
+  </Layout>
+) : (
+  <Layout
+    title={season ? `${season.name} Stats` : 'Stats'}
+    description={season ? `Statistical leaders for ${season.name}.` : 'Stat data is temporarily unavailable.'}
+    currentSeasonId={season?.id}
+  >
+    <div class="container page-section">
+      <h1>{season?.name} Stats</h1>
+      <p class="text-muted text-small">Last updated {new Date(lastUpdated).toLocaleString('en-US')}</p>
+
+      <nav class="tab-list" aria-label="Statistic categories">
+        <a href={tabHref('passing')} aria-current={category === 'passing' ? 'page' : undefined}>Passing</a>
+        <a href={tabHref('rushing')} aria-current={category === 'rushing' ? 'page' : undefined}>Rushing</a>
+        <a href={tabHref('receiving')} aria-current={category === 'receiving' ? 'page' : undefined}>Receiving</a>
+        <a href={tabHref('defense')} aria-current={category === 'defense' ? 'page' : undefined}>Defense</a>
+        <a href={tabHref('team')} aria-current={category === 'team' ? 'page' : undefined}>Team Stats</a>
+        <a href={tabHref('manager')} aria-current={category === 'manager' ? 'page' : undefined}>Manager Stats</a>
+      </nav>
+
+      {unavailable ? (
+        <p class="error-banner" role="alert">League data is temporarily unavailable. Please check back shortly.</p>
+      ) : (
+        <>
+          {category === 'passing' && (
+            <PlayerStatTable
+              rows={passing}
+              columns={[
+                { key: 'completions', label: 'Comp' },
+                { key: 'attempts', label: 'Att' },
+                { key: 'completionPercentage', label: 'Comp %', format: (v) => v.toFixed(1) },
+                { key: 'passingYards', label: 'Yds' },
+                { key: 'passingTouchdowns', label: 'TD' },
+                { key: 'interceptions', label: 'INT' },
+              ]}
+            />
+          )}
+          {category === 'rushing' && (
+            <PlayerStatTable
+              rows={rushing}
+              columns={[
+                { key: 'rushingAttempts', label: 'Att' },
+                { key: 'rushingYards', label: 'Yds' },
+                { key: 'yardsPerAttempt', label: 'Y/A', format: (v) => v.toFixed(1) },
+                { key: 'rushingTouchdowns', label: 'TD' },
+                { key: 'longestRush', label: 'Long' },
+              ]}
+            />
+          )}
+          {category === 'receiving' && (
+            <PlayerStatTable
+              rows={receiving}
+              columns={[
+                { key: 'receptions', label: 'Rec' },
+                { key: 'receivingYards', label: 'Yds' },
+                { key: 'yardsPerReception', label: 'Y/R', format: (v) => v.toFixed(1) },
+                { key: 'receivingTouchdowns', label: 'TD' },
+                { key: 'longestReception', label: 'Long' },
+              ]}
+            />
+          )}
+          {category === 'defense' && (
+            <>
+              <nav class="tab-list" aria-label="Defensive categories">
+                {defenseCategories.map((c) => (
+                  <a
+                    href={`?category=defense&sub=${c.key}`}
+                    aria-current={defenseCategory === c.key ? 'page' : undefined}
+                  >{c.label}</a>
+                ))}
+              </nav>
+              <PlayerStatTable
+                rows={defense}
+                columns={[{ key: defenseCategory, label: defenseCategories.find((c) => c.key === defenseCategory)?.label ?? 'Value' }]}
+              />
+            </>
+          )}
+          {category === 'team' && <TeamStatTable rows={team} />}
+          {category === 'manager' && (
+            <>
+              <nav class="tab-list" aria-label="Manager stat range">
+                <a href="?category=manager&mode=season" aria-current={managerMode === 'season' ? 'page' : undefined}>Current Season</a>
+                <a href="?category=manager&mode=career" aria-current={managerMode === 'career' ? 'page' : undefined}>Career</a>
+              </nav>
+              <ManagerStatTable mode={managerMode} seasonRows={managerSeason} careerRows={managerCareer} />
+            </>
+          )}
+        </>
+      )}
+    </div>
+  </Layout>
+)}

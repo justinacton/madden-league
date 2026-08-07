@@ -1,0 +1,29 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import NewsCard from '../../components/NewsCard.astro';
+import { getNewsList, LeagueDataUnavailableError } from '../../lib/api';
+import { getRuntimeEnv } from '../../lib/envAstro';
+
+const env = getRuntimeEnv(Astro.locals);
+let articles: Awaited<ReturnType<typeof getNewsList>> = [];
+let unavailable = false;
+try {
+  articles = await getNewsList(env);
+} catch (error) {
+  unavailable = error instanceof LeagueDataUnavailableError;
+}
+---
+<Layout title="News" description="League news, recaps, and announcements.">
+  <div class="container page-section">
+    <h1>News</h1>
+    {unavailable ? (
+      <p class="error-banner" role="alert">League data is temporarily unavailable. Please check back shortly.</p>
+    ) : articles.length === 0 ? (
+      <p class="empty-state">No news articles have been published yet.</p>
+    ) : (
+      <div class="grid grid-3">
+        {articles.map((article) => <NewsCard article={article} />)}
+      </div>
+    )}
+  </div>
+</Layout>

@@ -1,0 +1,126 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import NotFound from '../../components/NotFound.astro';
+import GameCard from '../../components/GameCard.astro';
+import { formatSignedNumber, formatWinPercentage } from '../../lib/formatting';
+import { getSiteInfo, getTeamDetail, LeagueDataUnavailableError } from '../../lib/api';
+import { getRuntimeEnv } from '../../lib/envAstro';
+
+const { teamSlug } = Astro.params;
+const env = getRuntimeEnv(Astro.locals);
+const requestedSeason = Astro.url.searchParams.get('season') ?? undefined;
+
+let siteInfo = null;
+let detail: Awaited<ReturnType<typeof getTeamDetail>> = null;
+let unavailable = false;
+try {
+  siteInfo = await getSiteInfo(env);
+  const seasonId = requestedSeason ?? siteInfo.activeSeasonId;
+  if (teamSlug && seasonId) detail = await getTeamDetail(env, teamSlug, seasonId);
+} catch (error) {
+  unavailable = error instanceof LeagueDataUnavailableError;
+}
+if (!detail && !unavailable) Astro.response.status = 404;
+---
+{!detail && !unavailable ? (
+  <Layout title="Team Not Found" description="This team could not be found." noindex>
+    <NotFound message="That team doesn't exist. It may have been removed or the link is incorrect." />
+  </Layout>
+) : (
+  <Layout
+    title={detail ? detail.team.city + ' ' + detail.team.teamName : 'Team'}
+    description={detail ? `Roster, schedule, and stats for the ${detail.team.city} ${detail.team.teamName}.` : 'Team data is temporarily unavailable.'}
+  >
+    <div class="container page-section">
+      {unavailable ? (
+        <p class="error-banner" role="alert">League data is temporarily unavailable. Please check back shortly.</p>
+      ) : detail && (
+        <>
+          <div class="cluster" style="margin-bottom: var(--space-4);">
+            <img class="team-logo" style="width:56px;height:56px;" src={detail.team.logoUrl} alt="" />
+            <div>
+              <h1 class="mt-0">{detail.team.city} {detail.team.teamName}</h1>
+              <p class="mt-0 text-muted">{detail.team.conference} {detail.team.division}</p>
+            </div>
+          </div>
+
+          {siteInfo && siteInfo.seasons.length > 1 && (
+            <form class="filter-bar" method="get">
+              <div class="filter-field">
+                <label for="season">Season</label>
+                <select id="season" name="season" onchange="this.form.submit()">
+                  {siteInfo.seasons.map((s) => (
+                    <option value={s.id} selected={s.id === (requestedSeason ?? siteInfo!.activeSeasonId)}>{s.name}</option>
+                  ))}
+                </select>
+              </div>
+              <noscript><button class="btn" type="submit">View Season</button></noscript>
+            </form>
+          )}
+
+          {detail.currentManager && (
+            <p>Current manager: <a href={`/managers/${detail.currentManager.slug}`}>{detail.currentManager.name}</a></p>
+          )}
+
+          {detail.currentStanding ? (
+            <div class="grid grid-4" style="margin-bottom: var(--space-6);">
+              <div class="stat-card">
+                <span class="stat-label">Record</span>
+                <span class="stat-value">{detail.currentStanding.wins}-{detail.currentStanding.losses}{detail.currentStanding.ties > 0 ? `-${detail.currentStanding.ties}` : ''}</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Standing</span>
+                <span class="stat-value">#{detail.currentStanding.rank}</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Win %</span>
+                <span class="stat-value">{formatWinPercentage(detail.currentStanding.winPercentage)}</span>
+              </div>
+              <div class="stat-card">
+                <span class="stat-label">Point Diff</span>
+                <span class="stat-value">{formatSignedNumber(detail.currentStanding.pointDifferential)}</span>
+              </div>
+            </div>
+          ) : (
+            <p class="empty-state">No games played yet this season.</p>
+          )}
+
+          <div class="section-heading"><h2>Schedule &amp; Results</h2></div>
+          {detail.schedule.length === 0 ? (
+            <p class="empty-state">No games have been scheduled for this team.</p>
+          ) : (
+            <div class="grid grid-2" style="margin-bottom: var(--space-6);">
+              {detail.schedule.map((game) => <GameCard game={game} />)}
+            </div>
+          )}
+
+          <div class="section-heading"><h2>Franchise History</h2></div>
+          {detail.historicalSeasons.length === 0 ? (
+            <p class="empty-state">No historical seasons on record.</p>
+          ) : (
+            <div class="table-scroll">
+              <table class="data-table responsive-cards">
+                <thead>
+                  <tr>
+                    <th scope="col">Season</th>
+                    <th scope="col">Manager</th>
+                    <th scope="col">Final Finish</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.historicalSeasons.map((row) => (
+                    <tr>
+                      <td data-label="Season">{row.seasonName}</td>
+                      <td data-label="Manager">{row.managerName}</td>
+                      <td data-label="Final Finish">{row.finalFinish ?? '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  </Layout>
+)}

@@ -1,0 +1,49 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import NotFound from '../../components/NotFound.astro';
+import { formatFullDate } from '../../lib/formatting';
+import { renderSafeMarkdown } from '../../lib/markdown';
+import { getNewsArticle, LeagueDataUnavailableError } from '../../lib/api';
+import { getRuntimeEnv } from '../../lib/envAstro';
+
+const { slug } = Astro.params;
+const env = getRuntimeEnv(Astro.locals);
+
+let article: Awaited<ReturnType<typeof getNewsArticle>> = null;
+let unavailable = false;
+try {
+  article = slug ? await getNewsArticle(env, slug) : null;
+} catch (error) {
+  unavailable = error instanceof LeagueDataUnavailableError;
+}
+if (!article && !unavailable) Astro.response.status = 404;
+
+const bodyHtml = article ? renderSafeMarkdown(article.body) : '';
+---
+{!article && !unavailable ? (
+  <Layout title="Article Not Found" description="This article could not be found." noindex>
+    <NotFound message="That article doesn't exist. It may have been removed or the link is incorrect." />
+  </Layout>
+) : (
+  <Layout
+    title={article ? article.title : 'News'}
+    description={article ? article.summary : 'News is temporarily unavailable.'}
+    ogImage={article?.featuredImageUrl}
+  >
+    <article class="container page-section">
+      {unavailable ? (
+        <p class="error-banner" role="alert">League data is temporarily unavailable. Please check back shortly.</p>
+      ) : article && (
+        <>
+          <p class="text-muted text-small">
+            {formatFullDate(article.publishDate)}
+            {article.author ? ` · ${article.author}` : ''}
+          </p>
+          <h1>{article.title}</h1>
+          {article.featuredImageUrl && <img src={article.featuredImageUrl} alt="" style="border-radius: var(--radius-lg); margin-bottom: var(--space-5);" />}
+          <div class="panel panel-pad article-body" set:html={bodyHtml} />
+        </>
+      )}
+    </article>
+  </Layout>
+)}

@@ -1,0 +1,131 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import GameCard from '../../../components/GameCard.astro';
+import NotFound from '../../../components/NotFound.astro';
+import { getSchedule, getSeason, getTeamsForSeason, LeagueDataUnavailableError, type ScheduleFilters } from '../../../lib/api';
+import { getRuntimeEnv } from '../../../lib/envAstro';
+import type { GameStatus, GameType } from '../../../lib/types';
+
+const { season: seasonId } = Astro.params;
+const env = getRuntimeEnv(Astro.locals);
+const params = Astro.url.searchParams;
+
+const weekParam = params.get('week');
+const filters: ScheduleFilters = {
+  week: weekParam ? Number(weekParam) : undefined,
+  teamId: params.get('team') ?? undefined,
+  managerId: params.get('manager') ?? undefined,
+  status: (params.get('status') as GameStatus) ?? undefined,
+  gameType: (params.get('type') as GameType) ?? undefined,
+};
+
+let season = null;
+let games: Awaited<ReturnType<typeof getSchedule>> = [];
+let teams: Awaited<ReturnType<typeof getTeamsForSeason>> = [];
+let unavailable = false;
+try {
+  season = seasonId ? await getSeason(env, seasonId) : null;
+  if (season) {
+    [games, teams] = await Promise.all([getSchedule(env, season.id, filters), getTeamsForSeason(env, season.id)]);
+  }
+} catch (error) {
+  unavailable = error instanceof LeagueDataUnavailableError;
+}
+if (!season && !unavailable) Astro.response.status = 404;
+
+const currentWeek = filters.week ?? season?.currentWeek ?? 1;
+const totalWeeks = season?.regularSeasonWeeks ?? 1;
+const managers = teams.map((t) => t.manager);
+
+function withParam(name: string, value: string): string {
+  const next = new URLSearchParams(params);
+  if (value) next.set(name, value);
+  else next.delete(name);
+  return `?${next.toString()}`;
+}
+---
+{!season && !unavailable ? (
+  <Layout title="Season Not Found" description="This season could not be found." noindex>
+    <NotFound message="That season doesn't exist. It may have been removed or the link is incorrect." />
+  </Layout>
+) : (
+  <Layout
+    title={season ? `${season.name} Schedule` : 'Schedule'}
+    description={season ? `Full schedule and results for ${season.name}.` : 'Schedule data is temporarily unavailable.'}
+    currentSeasonId={season?.id}
+  >
+    <div class="container page-section">
+      <h1>{season?.name} Schedule</h1>
+
+      {unavailable ? (
+        <p class="error-banner" role="alert">League data is temporarily unavailable. Please check back shortly.</p>
+      ) : (
+        <>
+          <form class="filter-bar" method="get">
+            <div class="filter-field">
+              <label for="week">Week</label>
+              <select id="week" name="week">
+                <option value="">All weeks</option>
+                {Array.from({ length: totalWeeks + 2 }, (_, i) => i + 1).map((w) => (
+                  <option value={w} selected={filters.week === w}>Week {w}</option>
+                ))}
+              </select>
+            </div>
+            <div class="filter-field">
+              <label for="team">Team</label>
+              <select id="team" name="team">
+                <option value="">All teams</option>
+                {teams.map((t) => (
+                  <option value={t.team.id} selected={filters.teamId === t.team.id}>{t.team.name}</option>
+                ))}
+              </select>
+            </div>
+            <div class="filter-field">
+              <label for="manager">Manager</label>
+              <select id="manager" name="manager">
+                <option value="">All managers</option>
+                {managers.map((m) => (
+                  <option value={m.id} selected={filters.managerId === m.id}>{m.name}</option>
+                ))}
+              </select>
+            </div>
+            <div class="filter-field">
+              <label for="status">Status</label>
+              <select id="status" name="status">
+                <option value="">All statuses</option>
+                {(['Scheduled', 'In Progress', 'Final', 'Postponed', 'Cancelled'] as const).map((s) => (
+                  <option value={s} selected={filters.status === s}>{s}</option>
+                ))}
+              </select>
+            </div>
+            <div class="filter-field">
+              <label for="type">Game Type</label>
+              <select id="type" name="type">
+                <option value="">All types</option>
+                {(['Regular Season', 'Playoff', 'Championship', 'Exhibition'] as const).map((t) => (
+                  <option value={t} selected={filters.gameType === t}>{t}</option>
+                ))}
+              </select>
+            </div>
+            <button class="btn btn-accent" type="submit">Apply Filters</button>
+          </form>
+
+          {filters.week !== undefined && (
+            <div class="cluster" style="margin-bottom: var(--space-5);">
+              <a class="btn" href={withParam('week', String(Math.max(1, currentWeek - 1)))}>&larr; Previous Week</a>
+              <a class="btn" href={withParam('week', String(currentWeek + 1))}>Next Week &rarr;</a>
+            </div>
+          )}
+
+          {games.length === 0 ? (
+            <p class="empty-state">No games match these filters.</p>
+          ) : (
+            <div class="grid grid-2">
+              {games.map((game) => <GameCard game={game} />)}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  </Layout>
+)}

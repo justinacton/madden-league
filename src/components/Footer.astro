@@ -1,0 +1,19 @@
+---
+interface Props {
+  leagueName: string;
+}
+const { leagueName } = Astro.props;
+const year = new Date().getFullYear();
+---
+<footer class="site-footer">
+  <div class="container cluster" style="justify-content: space-between;">
+    <p class="mt-0">&copy; {year} {leagueName} &mdash; Professional Union of Nonexistent Talent. All stats and records are for entertainment purposes only.</p>
+    <nav aria-label="Footer">
+      <a href="/rules">Rules</a>
+      <span aria-hidden="true"> &middot; </span>
+      <a href="/news">News</a>
+      <span aria-hidden="true"> &middot; </span>
+      <a href="/sitemap.xml">Sitemap</a>
+    </nav>
+  </div>
+</footer>

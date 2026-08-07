@@ -1,0 +1,11 @@
+name = "madden-league"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+pages_build_output_dir = "dist"
+
+# Non-secret vars can live here; secrets (AIRTABLE_TOKEN) must be set with
+# `wrangler pages secret put AIRTABLE_TOKEN` or in the Cloudflare Pages dashboard.
+[vars]
+USE_MOCK_DATA = "true"
+AIRTABLE_BASE_ID = ""
+AIRTABLE_API_URL = "https://api.airtable.com/v0"

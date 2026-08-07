@@ -1,0 +1,68 @@
+---
+import type { PlayerLeaderboardEntry } from '../../lib/types';
+
+export interface StatColumn {
+  key: keyof PlayerLeaderboardEntry;
+  label: string;
+  format?: (value: number) => string;
+}
+
+interface Props {
+  rows: PlayerLeaderboardEntry[];
+  columns: StatColumn[];
+  emptyMessage?: string;
+}
+
+const { rows, columns, emptyMessage } = Astro.props;
+
+function cellValue(row: PlayerLeaderboardEntry, column: StatColumn): { display: string; sortValue: number } {
+  const raw = row[column.key];
+  const numeric = typeof raw === 'number' ? raw : 0;
+  return {
+    display: column.format ? column.format(numeric) : String(raw ?? '-'),
+    sortValue: numeric,
+  };
+}
+---
+{rows.length === 0 ? (
+  <p class="empty-state">{emptyMessage ?? 'No statistics have been entered for this category.'}</p>
+) : (
+  <div class="table-scroll">
+    <table class="data-table responsive-cards" data-sortable>
+      <thead>
+        <tr>
+          <th scope="col" data-sort-key="rank" data-sort-type="numeric" aria-sort="ascending">Rank</th>
+          <th scope="col" class="team-cell">Player</th>
+          <th scope="col" class="team-cell">Team</th>
+          <th scope="col">Manager</th>
+          <th scope="col" class="numeric" data-sort-key="games" data-sort-type="numeric">Games</th>
+          {columns.map((col) => (
+            <th scope="col" class="numeric" data-sort-key={col.key} data-sort-type="numeric">{col.label}</th>
+          ))}
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr class:list={{ 'top-three': row.rank <= 3 }}>
+            <td data-label="Rank">{row.rank}</td>
+            <td data-label="Player" class="team-cell">{row.playerName} <span class="text-muted text-small">{row.position}</span></td>
+            <td data-label="Team" class="team-cell">
+              <a class="team-link" href={`/teams/${row.team.slug}`}>
+                <img class="team-logo-sm" src={row.team.logoUrl} alt="" loading="lazy" />
+                {row.team.abbreviation}
+              </a>
+            </td>
+            <td data-label="Manager"><a href={`/managers/${row.manager.slug}`}>{row.manager.name}</a></td>
+            <td data-label="Games" class="numeric">{row.games}</td>
+            {columns.map((col) => {
+              const { display, sortValue } = cellValue(row, col);
+              return (
+                <td data-label={col.label} class="numeric" data-sort-value={sortValue}>{display}</td>
+              );
+            })}
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+)}

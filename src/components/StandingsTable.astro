@@ -1,0 +1,63 @@
+---
+import { formatSignedNumber, formatWinPercentage } from '../lib/formatting';
+import type { Standing } from '../lib/types';
+
+interface Props {
+  standings: Standing[];
+  caption?: string;
+}
+
+const { standings, caption } = Astro.props;
+const hasTies = standings.some((s) => s.ties > 0);
+const hasSeeds = standings.some((s) => s.playoffSeed !== undefined);
+---
+{standings.length === 0 ? (
+  <p class="empty-state">No standings are available for this season yet.</p>
+) : (
+  <div class="table-scroll">
+    <table class="data-table responsive-cards" data-sortable>
+      {caption && <caption>{caption}</caption>}
+      <thead>
+        <tr>
+          <th scope="col" data-sort-key="rank" data-sort-type="numeric" aria-sort="ascending">Rank</th>
+          <th scope="col" class="team-cell">Team</th>
+          <th scope="col">Manager</th>
+          {hasSeeds && <th scope="col" class="numeric" data-sort-key="seed" data-sort-type="numeric">Seed</th>}
+          <th scope="col" class="numeric" data-sort-key="wins" data-sort-type="numeric">W</th>
+          <th scope="col" class="numeric" data-sort-key="losses" data-sort-type="numeric">L</th>
+          {hasTies && <th scope="col" class="numeric" data-sort-key="ties" data-sort-type="numeric">T</th>}
+          <th scope="col" class="numeric" data-sort-key="winPct" data-sort-type="numeric">Win%</th>
+          <th scope="col" class="numeric" data-sort-key="pf" data-sort-type="numeric">PF</th>
+          <th scope="col" class="numeric" data-sort-key="pa" data-sort-type="numeric">PA</th>
+          <th scope="col" class="numeric" data-sort-key="diff" data-sort-type="numeric">Diff</th>
+          <th scope="col" class="numeric">Streak</th>
+          <th scope="col" class="numeric" data-sort-key="gp" data-sort-type="numeric">GP</th>
+        </tr>
+      </thead>
+      <tbody>
+        {standings.map((standing) => (
+          <tr class:list={{ 'top-three': standing.rank <= 3 }}>
+            <td data-label="Rank">{standing.rank}</td>
+            <td data-label="Team" class="team-cell">
+              <a class="team-link" href={`/teams/${standing.team.slug}`}>
+                <img class="team-logo-sm" src={standing.team.logoUrl} alt="" loading="lazy" />
+                {standing.team.name}
+              </a>
+            </td>
+            <td data-label="Manager"><a href={`/managers/${standing.manager.slug}`}>{standing.manager.name}</a></td>
+            {hasSeeds && <td data-label="Seed" class="numeric">{standing.playoffSeed ?? '-'}</td>}
+            <td data-label="Wins" class="numeric">{standing.wins}</td>
+            <td data-label="Losses" class="numeric">{standing.losses}</td>
+            {hasTies && <td data-label="Ties" class="numeric">{standing.ties}</td>}
+            <td data-label="Win %" class="numeric" data-sort-value={standing.winPercentage}>{formatWinPercentage(standing.winPercentage)}</td>
+            <td data-label="Points For" class="numeric">{standing.pointsFor}</td>
+            <td data-label="Points Against" class="numeric">{standing.pointsAgainst}</td>
+            <td data-label="Differential" class="numeric" data-sort-value={standing.pointDifferential}>{formatSignedNumber(standing.pointDifferential)}</td>
+            <td data-label="Streak" class="numeric">{standing.streak}</td>
+            <td data-label="Games Played" class="numeric">{standing.gamesPlayed}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+)}

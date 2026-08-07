@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm --version)",
+      "Bash(cd \"c:\\\\Users\\\\jacton\\\\source\\\\repos\\\\_Personal\\\\madden-league\" && mkdir -p public/images/league public/images/teams src/components src/layouts src/pages/seasons/\\\\[season\\\\] src/pages/seasons/\\\\[season\\\\]/games src/pages/teams src/pages/managers src/pages/news src/lib/mock src/styles src/content functions/api/games functions/api/teams functions/api/managers functions/api/news tests && echo done)",
+      "Bash(npm install *)",
+      "Bash(npx vitest *)",
+      "Bash(npx tsc *)",
+      "Bash(npx astro *)",
+      "Bash(node -e \"console.log\\(Object.keys\\(require\\('@astrojs/cloudflare'\\)\\)\\)\")",
+      "Bash(curl -s -D - -o /dev/null \"http://127.0.0.1:8788/managers/nobody\")",
+      "Bash(curl -s -D - -o /dev/null \"http://127.0.0.1:8788/seasons/bogus-season/standings\")",
+      "Bash(xargs -I{} sh -c 'grep -l \"AIRTABLE\" \"{}\" 2>/dev/null')",
+      "Bash(pkill -f \"wrangler pages dev\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" \"http://127.0.0.1:8790/api/teams/49ers\")",
+      "Bash(curl -s \"http://127.0.0.1:8790/api/teams\")",
+      "Bash(node -e \"let d='';process.stdin.on\\('data',c=>d+=c\\);process.stdin.on\\('end',\\(\\)=>{const j=JSON.parse\\(d\\);console.log\\(j.teams.map\\(t=>t.team.slug\\)\\);}\\)\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" \"http://127.0.0.1:8790/teams/niners\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" \"http://127.0.0.1:8790/teams/49ers\")",
+      "Bash(nohup npx wrangler pages dev ./dist --port 8797 --compatibility-date=2024-11-01)",
+      "Bash(disown)",
+      "Bash(curl -s -m 10 -o /dev/null -w \"HTTP:%{http_code}\\\\n\" http://127.0.0.1:8797/)",
+      "Bash(tail -50 /tmp/wrangler11.log 2>&1)",
+      "Read(//tmp/**)",
+      "Bash(ps -o pid,args)",
+      "Bash(ps -W)",
+      "Bash(wmic process *)",
+      "Bash(taskkill //F //IM workerd.exe //T)",
+      "Bash(taskkill //F //FI \"WINDOWTITLE eq none\" //IM node.exe //T)",
+      "Bash(curl -s -m 10 -o /dev/null -w \"HTTP:%{http_code}\\\\n\" http://127.0.0.1:8799/)",
+      "Bash(curl -s -m 10 http://127.0.0.1:8799/)",
+      "Bash(grep -o 'site-logo-link.\\\\{0,50\\\\}\\\\|header-season-select')",
+      "Bash(curl -s -m 10 -o /dev/null -w \"HTTP:%{http_code}\\\\n\" http://127.0.0.1:8800/managers)",
+      "Bash(curl -s -m 8 -o /dev/null -w \"HTTP:%{http_code}\\\\n\" http://127.0.0.1:8800/managers)",
+      "Bash(curl -s -m 8 -o /dev/null -w \"HTTP:%{http_code}\\\\n\" http://127.0.0.1:8850/managers)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\jacton\\source\\repos\\_Personal\\madden-league\\src\\pages\\seasons"
+    ]
+  }
+}

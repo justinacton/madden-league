@@ -1,0 +1,70 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import { formatWinPercentage } from '../../lib/formatting';
+import { getManagerLeaderboard, LeagueDataUnavailableError } from '../../lib/api';
+import { getRuntimeEnv } from '../../lib/envAstro';
+
+const env = getRuntimeEnv(Astro.locals);
+let managers: Awaited<ReturnType<typeof getManagerLeaderboard>> = [];
+let unavailable = false;
+try {
+  managers = await getManagerLeaderboard(env);
+} catch (error) {
+  unavailable = error instanceof LeagueDataUnavailableError;
+}
+const ranked = [...managers]
+  .sort((a, b) => b.careerWins - a.careerWins || b.careerWinPercentage - a.careerWinPercentage)
+  .map((m, i) => ({ ...m, rank: i + 1 }));
+---
+<Layout title="Managers" description="Career records and championships for every PUNT manager.">
+  <div class="container page-section">
+    <h1>Managers</h1>
+    {unavailable ? (
+      <p class="error-banner" role="alert">League data is temporarily unavailable. Please check back shortly.</p>
+    ) : ranked.length === 0 ? (
+      <p class="empty-state">No managers have been added yet.</p>
+    ) : (
+      <div class="table-scroll">
+        <table class="data-table responsive-cards" data-sortable>
+          <thead>
+            <tr>
+              <th scope="col" data-sort-key="rank" data-sort-type="numeric" aria-sort="ascending">Rank</th>
+              <th scope="col">Manager</th>
+              <th scope="col" class="team-cell">Current Team</th>
+              <th scope="col" class="numeric" data-sort-key="wins" data-sort-type="numeric">Career W</th>
+              <th scope="col" class="numeric" data-sort-key="losses" data-sort-type="numeric">Career L</th>
+              <th scope="col" class="numeric" data-sort-key="ties" data-sort-type="numeric">T</th>
+              <th scope="col" class="numeric" data-sort-key="winpct" data-sort-type="numeric">Win%</th>
+              <th scope="col" class="numeric" data-sort-key="playoff" data-sort-type="numeric">Playoff W-L</th>
+              <th scope="col" class="numeric" data-sort-key="championships" data-sort-type="numeric">Championships</th>
+              <th scope="col" class="numeric" data-sort-key="seasons" data-sort-type="numeric">Seasons</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ranked.map((manager) => (
+              <tr class:list={{ 'top-three': manager.rank <= 3 }}>
+                <td data-label="Rank">{manager.rank}</td>
+                <td data-label="Manager"><a href={`/managers/${manager.slug}`}>{manager.displayName}</a></td>
+                <td data-label="Current Team" class="team-cell">
+                  {manager.currentTeam ? (
+                    <a class="team-link" href={`/teams/${manager.currentTeam.slug}`}>
+                      <img class="team-logo-sm" src={manager.currentTeam.logoUrl} alt="" loading="lazy" />
+                      {manager.currentTeam.abbreviation}
+                    </a>
+                  ) : '-'}
+                </td>
+                <td data-label="Career Wins" class="numeric">{manager.careerWins}</td>
+                <td data-label="Career Losses" class="numeric">{manager.careerLosses}</td>
+                <td data-label="Ties" class="numeric">{manager.careerTies}</td>
+                <td data-label="Win %" class="numeric" data-sort-value={manager.careerWinPercentage}>{formatWinPercentage(manager.careerWinPercentage)}</td>
+                <td data-label="Playoff Record" class="numeric" data-sort-value={manager.careerPlayoffWins}>{manager.careerPlayoffWins}-{manager.careerPlayoffLosses}</td>
+                <td data-label="Championships" class="numeric">{manager.championships}</td>
+                <td data-label="Seasons Played" class="numeric">{manager.seasonsPlayed}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    )}
+  </div>
+</Layout>

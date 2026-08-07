@@ -1,0 +1,123 @@
+---
+import Layout from '../../../../layouts/Layout.astro';
+import NotFound from '../../../../components/NotFound.astro';
+import { formatFullDate } from '../../../../lib/formatting';
+import { getGameDetail, getSeason, LeagueDataUnavailableError } from '../../../../lib/api';
+import { getRuntimeEnv } from '../../../../lib/envAstro';
+
+const { season: seasonId, gameId } = Astro.params;
+const env = getRuntimeEnv(Astro.locals);
+
+let season = null;
+let detail: Awaited<ReturnType<typeof getGameDetail>> = null;
+let unavailable = false;
+try {
+  season = seasonId ? await getSeason(env, seasonId) : null;
+  if (season && gameId) detail = await getGameDetail(env, gameId);
+} catch (error) {
+  unavailable = error instanceof LeagueDataUnavailableError;
+}
+
+const notFound = !unavailable && (!season || !detail || detail.game.seasonId !== season.id);
+if (notFound) Astro.response.status = 404;
+const isFinal = detail?.game.status === 'Final';
+---
+{notFound ? (
+  <Layout title="Game Not Found" description="This game could not be found." noindex>
+    <NotFound message="That game doesn't exist. It may have been removed or the link is incorrect." />
+  </Layout>
+) : (
+  <Layout
+    title={detail ? `${detail.game.awayTeam.abbreviation} @ ${detail.game.homeTeam.abbreviation} — Week ${detail.game.week}` : 'Game Detail'}
+    description={detail ? `${detail.game.awayTeam.name} at ${detail.game.homeTeam.name}, Week ${detail.game.week}.` : 'Game data is temporarily unavailable.'}
+    currentSeasonId={season?.id}
+  >
+    <div class="container page-section">
+      {unavailable ? (
+        <p class="error-banner" role="alert">League data is temporarily unavailable. Please check back shortly.</p>
+      ) : detail && (
+        <>
+          <p class="text-muted text-small">Week {detail.game.week} · {detail.game.gameType} · {formatFullDate(detail.game.gameDate)}</p>
+          <div class="panel panel-pad" style="margin-bottom: var(--space-6);">
+            <div class="grid grid-2">
+              <div class="stack" style="align-items:center; text-align:center;">
+                <img class="team-logo" style="width:56px;height:56px;" src={detail.game.awayTeam.logoUrl} alt="" />
+                <h2 class="mt-0">{detail.game.awayTeam.name}</h2>
+                <p class="mt-0">{detail.game.awayManager.name}</p>
+                {isFinal && <p class="game-card-score" style="font-size:2.5rem;">{detail.game.awayScore}</p>}
+              </div>
+              <div class="stack" style="align-items:center; text-align:center;">
+                <img class="team-logo" style="width:56px;height:56px;" src={detail.game.homeTeam.logoUrl} alt="" />
+                <h2 class="mt-0">{detail.game.homeTeam.name}</h2>
+                <p class="mt-0">{detail.game.homeManager.name}</p>
+                {isFinal && <p class="game-card-score" style="font-size:2.5rem;">{detail.game.homeScore}</p>}
+              </div>
+            </div>
+            <p class="text-muted" style="text-align:center;">
+              {detail.game.status}{detail.game.overtime ? ' (Overtime)' : ''}{detail.game.isTie ? ' — Tie' : ''}
+            </p>
+          </div>
+
+          {detail.game.recap && (
+            <div class="panel panel-pad" style="margin-bottom: var(--space-6);">
+              <h3>Recap</h3>
+              <p>{detail.game.recap}</p>
+            </div>
+          )}
+
+          {(detail.homeStats || detail.awayStats) && (
+            <div class="page-section" style="padding-top:0;">
+              <h2>Team Comparison</h2>
+              <div class="table-scroll">
+                <table class="data-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">{detail.game.awayTeam.abbreviation}</th>
+                      <th scope="col">Statistic</th>
+                      <th scope="col">{detail.game.homeTeam.abbreviation}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {[
+                      ['Total Offense', detail.awayStats?.totalOffenseYards, detail.homeStats?.totalOffenseYards],
+                      ['Passing Yards', detail.awayStats?.passingYards, detail.homeStats?.passingYards],
+                      ['Rushing Yards', detail.awayStats?.rushingYards, detail.homeStats?.rushingYards],
+                      ['First Downs', detail.awayStats?.firstDowns, detail.homeStats?.firstDowns],
+                      ['Turnovers', detail.awayStats?.turnovers, detail.homeStats?.turnovers],
+                      ['Sacks Allowed', detail.awayStats?.sacksAllowed, detail.homeStats?.sacksAllowed],
+                      ['Defensive Sacks', detail.awayStats?.defensiveSacks, detail.homeStats?.defensiveSacks],
+                    ].map(([label, away, home]) => (
+                      <tr>
+                        <td class="numeric">{away ?? '-'}</td>
+                        <td>{label}</td>
+                        <td class="numeric">{home ?? '-'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+
+          <div class="page-section" style="padding-top:0;">
+            <h2>Game Leaders</h2>
+            <div class="grid grid-2">
+              {(['passing', 'rushing', 'receiving', 'defense'] as const).map((category) => (
+                <div class="card">
+                  <h4 style="text-transform:capitalize;">{category}</h4>
+                  {detail.leaders[category].length === 0 ? <p>No stats available.</p> : (
+                    <ul class="mt-0">
+                      {detail.leaders[category].map((line) => (
+                        <li>{line.label} ({line.team.abbreviation}) — {line.value}</li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
+    </div>
+  </Layout>
+)}

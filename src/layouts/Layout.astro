@@ -1,0 +1,110 @@
+---
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+import '../styles/global.css';
+import { getSiteInfo } from '../lib/api';
+import { getRuntimeEnv } from '../lib/envAstro';
+import type { SiteInfo } from '../lib/types';
+
+interface Props {
+  title: string;
+  description: string;
+  currentSeasonId?: string;
+  ogImage?: string;
+  noindex?: boolean;
+}
+
+const { title, description, currentSeasonId, ogImage, noindex } = Astro.props;
+const env = getRuntimeEnv(Astro.locals);
+
+let siteInfo: SiteInfo;
+let dataError = false;
+try {
+  siteInfo = await getSiteInfo(env);
+} catch {
+  dataError = true;
+  siteInfo = { leagueName: 'PUNT', activeSeasonId: null, seasons: [] };
+}
+
+const canonicalUrl = new URL(Astro.url.pathname, Astro.site ?? Astro.url.origin).toString();
+const pageTitle = title === siteInfo.leagueName ? title : `${title} | ${siteInfo.leagueName}`;
+const socialImage = ogImage ?? new URL('/images/league/logo.svg', Astro.site ?? Astro.url.origin).toString();
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonicalUrl} />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content={canonicalUrl} />
+    <meta property="og:image" content={socialImage} />
+    <meta name="twitter:card" content="summary_large_image" />
+    {noindex && <meta name="robots" content="noindex" />}
+    <link rel="icon" href="/images/league/logo.svg" type="image/svg+xml" />
+    <link rel="sitemap" href="/sitemap.xml" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <Header siteInfo={siteInfo} currentSeasonId={currentSeasonId} currentPath={Astro.url.pathname} />
+    {dataError && (
+      <div class="container" style="padding-top: var(--space-4);">
+        <p class="error-banner" role="alert">League data is temporarily unavailable. Some information on this page may be out of date.</p>
+      </div>
+    )}
+    <main id="main-content">
+      <slot />
+    </main>
+    <Footer leagueName={siteInfo.leagueName} />
+    <script>
+      // Lightweight, dependency-free sortable-table behavior. Opt in with
+      // <table data-sortable> and <th data-sort-key data-sort-type="numeric">.
+      function initSortableTables() {
+        document.querySelectorAll<HTMLTableElement>('table[data-sortable]').forEach((table) => {
+          const headers = table.querySelectorAll<HTMLTableCellElement>('th[data-sort-key]');
+          headers.forEach((th, colIndex) => {
+            th.tabIndex = 0;
+            th.setAttribute('role', 'button');
+            const activate = () => sortTableBy(table, colIndex, th);
+            th.addEventListener('click', activate);
+            th.addEventListener('keydown', (event) => {
+              if (event.key === 'Enter' || event.key === ' ') {
+                event.preventDefault();
+                activate();
+              }
+            });
+          });
+        });
+      }
+
+      function sortTableBy(table: HTMLTableElement, colIndex: number, th: HTMLTableCellElement) {
+        const tbody = table.tBodies[0];
+        if (!tbody) return;
+        const numeric = th.dataset.sortType === 'numeric';
+        const nextDirection = th.getAttribute('aria-sort') === 'ascending' ? 'descending' : 'ascending';
+        table.querySelectorAll('th[data-sort-key]').forEach((h) => h.removeAttribute('aria-sort'));
+        th.setAttribute('aria-sort', nextDirection);
+
+        const rows = Array.from(tbody.rows);
+        rows.sort((a, b) => {
+          const cellA = a.cells[colIndex];
+          const cellB = b.cells[colIndex];
+          const rawA = cellA?.dataset.sortValue ?? cellA?.textContent?.trim() ?? '';
+          const rawB = cellB?.dataset.sortValue ?? cellB?.textContent?.trim() ?? '';
+          const comparison = numeric
+            ? parseFloat(rawA) - parseFloat(rawB)
+            : rawA.localeCompare(rawB);
+          return nextDirection === 'ascending' ? comparison : -comparison;
+        });
+        rows.forEach((row) => tbody.appendChild(row));
+      }
+
+      initSortableTables();
+      document.addEventListener('astro:page-load', initSortableTables);
+    </script>
+  </body>
+</html>

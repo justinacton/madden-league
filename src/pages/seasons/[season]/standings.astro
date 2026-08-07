@@ -1,0 +1,41 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import StandingsTable from '../../../components/StandingsTable.astro';
+import NotFound from '../../../components/NotFound.astro';
+import { getSeason, getStandings, LeagueDataUnavailableError } from '../../../lib/api';
+import { getRuntimeEnv } from '../../../lib/envAstro';
+
+const { season: seasonId } = Astro.params;
+const env = getRuntimeEnv(Astro.locals);
+
+let season = null;
+let standings: Awaited<ReturnType<typeof getStandings>> = [];
+let unavailable = false;
+try {
+  season = seasonId ? await getSeason(env, seasonId) : null;
+  if (season) standings = await getStandings(env, season.id);
+} catch (error) {
+  unavailable = error instanceof LeagueDataUnavailableError;
+}
+if (!season && !unavailable) Astro.response.status = 404;
+---
+{!season && !unavailable ? (
+  <Layout title="Season Not Found" description="This season could not be found." noindex>
+    <NotFound message="That season doesn't exist. It may have been removed or the link is incorrect." />
+  </Layout>
+) : (
+  <Layout
+    title={season ? `${season.name} Standings` : 'Standings'}
+    description={season ? `Current standings for ${season.name}.` : 'League standings are temporarily unavailable.'}
+    currentSeasonId={season?.id}
+  >
+    <div class="container page-section">
+      <h1>{season?.name} Standings</h1>
+      {unavailable ? (
+        <p class="error-banner" role="alert">League data is temporarily unavailable. Please check back shortly.</p>
+      ) : (
+        <StandingsTable standings={standings} />
+      )}
+    </div>
+  </Layout>
+)}

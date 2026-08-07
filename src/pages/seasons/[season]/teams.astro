@@ -1,0 +1,61 @@
+---
+import Layout from '../../../layouts/Layout.astro';
+import NotFound from '../../../components/NotFound.astro';
+import { formatSignedNumber, formatAverage } from '../../../lib/formatting';
+import { getSeason, getTeamsForSeason, LeagueDataUnavailableError } from '../../../lib/api';
+import { getRuntimeEnv } from '../../../lib/envAstro';
+
+const { season: seasonId } = Astro.params;
+const env = getRuntimeEnv(Astro.locals);
+
+let season = null;
+let teams: Awaited<ReturnType<typeof getTeamsForSeason>> = [];
+let unavailable = false;
+try {
+  season = seasonId ? await getSeason(env, seasonId) : null;
+  if (season) teams = await getTeamsForSeason(env, season.id);
+} catch (error) {
+  unavailable = error instanceof LeagueDataUnavailableError;
+}
+if (!season && !unavailable) Astro.response.status = 404;
+---
+{!season && !unavailable ? (
+  <Layout title="Season Not Found" description="This season could not be found." noindex>
+    <NotFound message="That season doesn't exist. It may have been removed or the link is incorrect." />
+  </Layout>
+) : (
+  <Layout
+    title={season ? `${season.name} Teams` : 'Teams'}
+    description={season ? `All teams participating in ${season.name}.` : 'Team data is temporarily unavailable.'}
+    currentSeasonId={season?.id}
+  >
+    <div class="container page-section">
+      <h1>{season?.name} Teams</h1>
+      {unavailable ? (
+        <p class="error-banner" role="alert">League data is temporarily unavailable. Please check back shortly.</p>
+      ) : teams.length === 0 ? (
+        <p class="empty-state">No teams are set up for this season yet.</p>
+      ) : (
+        <div class="grid grid-4">
+          {teams.map(({ team, manager, standing }) => (
+            <a class="card" href={`/teams/${team.slug}`} style="text-decoration:none; display:flex; flex-direction:column; gap: var(--space-2);">
+              <img class="team-logo" style="width:40px;height:40px;" src={team.logoUrl} alt="" />
+              <h3 class="mt-0">{team.name}</h3>
+              <p class="mt-0">{manager.name}</p>
+              {standing ? (
+                <p class="mt-0 text-small">
+                  {standing.wins}-{standing.losses}{standing.ties > 0 ? `-${standing.ties}` : ''}
+                  &nbsp;·&nbsp;{formatAverage(standing.pointsFor / Math.max(1, standing.gamesPlayed))} PPG
+                  &nbsp;·&nbsp;{formatSignedNumber(standing.pointDifferential)}
+                  &nbsp;·&nbsp;{standing.streak}
+                </p>
+              ) : (
+                <p class="mt-0 text-small">No games played yet.</p>
+              )}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  </Layout>
+)}

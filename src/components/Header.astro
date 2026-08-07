@@ -1,0 +1,83 @@
+---
+import type { SiteInfo } from '../lib/types';
+
+interface Props {
+  siteInfo: SiteInfo;
+  currentSeasonId?: string;
+  currentPath: string;
+}
+
+const { siteInfo, currentSeasonId, currentPath } = Astro.props;
+const seasonForNav = currentSeasonId ?? siteInfo.activeSeasonId ?? '';
+
+const navLinks = [
+  { label: 'Home', href: '/', match: (path: string) => path === '/' },
+  { label: 'Standings', href: seasonForNav ? `/seasons/${seasonForNav}/standings` : '/', match: (path: string) => path.endsWith('/standings') },
+  { label: 'Schedule', href: seasonForNav ? `/seasons/${seasonForNav}/schedule` : '/', match: (path: string) => path.endsWith('/schedule') || path.includes('/games/') },
+  { label: 'Teams', href: seasonForNav ? `/seasons/${seasonForNav}/teams` : '/', match: (path: string) => path.endsWith('/teams') || path.startsWith('/teams/') },
+  { label: 'Managers', href: '/managers', match: (path: string) => path.startsWith('/managers') },
+  { label: 'Stats', href: seasonForNav ? `/seasons/${seasonForNav}/stats` : '/', match: (path: string) => path.endsWith('/stats') },
+  { label: 'News', href: '/news', match: (path: string) => path.startsWith('/news') },
+  { label: 'Rules', href: '/rules', match: (path: string) => path.startsWith('/rules') },
+];
+---
+<header class="site-header">
+  <div class="container">
+    <a class="site-logo-link" href="/" aria-label={`${siteInfo.leagueName} — Professional Union of Nonexistent Talent — Home`}>
+      <img class="site-logo" src="/images/league/logo.svg" alt="" />
+      <span class="site-tagline" aria-hidden="true">Professional Union of Nonexistent Talent</span>
+    </a>
+
+    {siteInfo.seasons.length > 0 && (
+      <select
+        class="season-select header-season-select"
+        aria-label="Select season"
+        data-season-select
+        data-active-season={siteInfo.activeSeasonId ?? ''}
+      >
+        {siteInfo.seasons.map((season) => (
+          <option value={season.id} selected={season.id === seasonForNav}>
+            {season.name}{season.status === 'Active' ? ' (Active)' : ''}
+          </option>
+        ))}
+      </select>
+    )}
+
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="primary-navigation" data-nav-toggle>
+      <span class="visually-hidden">Toggle menu</span>
+      <span aria-hidden="true">&#9776;</span>
+    </button>
+
+    <nav class="primary-nav" id="primary-navigation" aria-label="Primary">
+      {navLinks.map((link) => (
+        <a href={link.href} aria-current={link.match(currentPath) ? 'page' : undefined}>{link.label}</a>
+      ))}
+    </nav>
+  </div>
+</header>
+
+<script>
+  const toggle = document.querySelector<HTMLButtonElement>('[data-nav-toggle]');
+  const nav = document.getElementById('primary-navigation');
+  if (toggle && nav) {
+    toggle.addEventListener('click', () => {
+      const isOpen = nav.classList.toggle('is-open');
+      toggle.setAttribute('aria-expanded', String(isOpen));
+    });
+  }
+
+  const seasonSelect = document.querySelector<HTMLSelectElement>('[data-season-select]');
+  if (seasonSelect) {
+    seasonSelect.addEventListener('change', () => {
+      const newSeasonId = seasonSelect.value;
+      const path = window.location.pathname;
+      const seasonPathMatch = path.match(/^\/seasons\/[^/]+(\/.*)?$/);
+      if (seasonPathMatch) {
+        const rest = seasonPathMatch[1] ?? '/standings';
+        window.location.href = `/seasons/${newSeasonId}${rest}`;
+      } else {
+        window.location.href = `/seasons/${newSeasonId}/standings`;
+      }
+    });
+  }
+</script>

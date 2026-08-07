@@ -1,0 +1,57 @@
+---
+import { formatFullDate } from '../lib/formatting';
+import type { GameSummary } from '../lib/types';
+
+interface Props {
+  game: GameSummary;
+}
+
+const { game } = Astro.props;
+const isFinal = game.status === 'Final';
+const homeWon = isFinal && !game.isTie && (game.homeScore ?? 0) > (game.awayScore ?? 0);
+const awayWon = isFinal && !game.isTie && (game.awayScore ?? 0) > (game.homeScore ?? 0);
+
+const statusPillClass: Record<string, string> = {
+  Final: 'pill-final',
+  'In Progress': 'pill-live',
+  Scheduled: 'pill-scheduled',
+  Postponed: 'pill-postponed',
+  Cancelled: 'pill-cancelled',
+};
+---
+<article class="game-card">
+  <div class="game-card-meta">
+    <span>Week {game.week}{game.gameType !== 'Regular Season' ? ` · ${game.gameType}` : ''}</span>
+    <span class={`pill ${statusPillClass[game.status] ?? 'pill-scheduled'}`}>
+      {game.status}{game.overtime ? ' (OT)' : ''}
+    </span>
+  </div>
+
+  <div class="game-card-matchup">
+    <div class:list={['game-card-team', { winner: awayWon }]}>
+      <div class="game-card-team-info">
+        <img class="team-logo" src={game.awayTeam.logoUrl} alt="" loading="lazy" />
+        <span class="names">
+          <span class="team-name">{game.awayTeam.name}</span>
+          <span class="manager-name">{game.awayManager.name}</span>
+        </span>
+      </div>
+      {isFinal && <span class="game-card-score">{game.awayScore}</span>}
+    </div>
+    <div class:list={['game-card-team', { winner: homeWon }]}>
+      <div class="game-card-team-info">
+        <img class="team-logo" src={game.homeTeam.logoUrl} alt="" loading="lazy" />
+        <span class="names">
+          <span class="team-name">{game.homeTeam.name}</span>
+          <span class="manager-name">{game.homeManager.name}</span>
+        </span>
+      </div>
+      {isFinal && <span class="game-card-score">{game.homeScore}</span>}
+    </div>
+  </div>
+
+  <div class="game-card-footer">
+    <span class="text-muted">{game.gameDate ? formatFullDate(game.gameDate) : 'Date TBD'}</span>
+    <a href={`/seasons/${game.seasonId}/games/${game.id}`}>View details &rarr;</a>
+  </div>
+</article>

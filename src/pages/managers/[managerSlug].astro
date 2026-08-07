@@ -1,0 +1,157 @@
+---
+import Layout from '../../layouts/Layout.astro';
+import NotFound from '../../components/NotFound.astro';
+import GameCard from '../../components/GameCard.astro';
+import { formatSignedNumber, formatWinPercentage } from '../../lib/formatting';
+import { getManagerDetail, LeagueDataUnavailableError } from '../../lib/api';
+import { getRuntimeEnv } from '../../lib/envAstro';
+
+const { managerSlug } = Astro.params;
+const env = getRuntimeEnv(Astro.locals);
+
+let detail: Awaited<ReturnType<typeof getManagerDetail>> = null;
+let unavailable = false;
+try {
+  detail = managerSlug ? await getManagerDetail(env, managerSlug) : null;
+} catch (error) {
+  unavailable = error instanceof LeagueDataUnavailableError;
+}
+if (!detail && !unavailable) Astro.response.status = 404;
+---
+{!detail && !unavailable ? (
+  <Layout title="Manager Not Found" description="This manager could not be found." noindex>
+    <NotFound message="That manager doesn't exist. It may have been removed or the link is incorrect." />
+  </Layout>
+) : (
+  <Layout
+    title={detail ? detail.summary.displayName : 'Manager'}
+    description={detail ? `Career record and stats for ${detail.summary.displayName}.` : 'Manager data is temporarily unavailable.'}
+  >
+    <div class="container page-section">
+      {unavailable ? (
+        <p class="error-banner" role="alert">League data is temporarily unavailable. Please check back shortly.</p>
+      ) : detail && (
+        <>
+          <div class="cluster" style="margin-bottom: var(--space-4);">
+            {detail.summary.currentTeam && (
+              <img class="team-logo" style="width:56px;height:56px;" src={detail.summary.currentTeam.logoUrl} alt="" />
+            )}
+            <div>
+              <h1 class="mt-0">{detail.summary.displayName}</h1>
+              {detail.summary.currentTeam && (
+                <p class="mt-0 text-muted">Currently manages the <a href={`/teams/${detail.summary.currentTeam.slug}`}>{detail.summary.currentTeam.name}</a></p>
+              )}
+            </div>
+          </div>
+
+          <div class="grid grid-4" style="margin-bottom: var(--space-6);">
+            {detail.summary.currentSeasonRecord && (
+              <div class="stat-card">
+                <span class="stat-label">Current Season</span>
+                <span class="stat-value">{detail.summary.currentSeasonRecord.wins}-{detail.summary.currentSeasonRecord.losses}{detail.summary.currentSeasonRecord.ties > 0 ? `-${detail.summary.currentSeasonRecord.ties}` : ''}</span>
+              </div>
+            )}
+            <div class="stat-card">
+              <span class="stat-label">Career Record</span>
+              <span class="stat-value">{detail.summary.careerWins}-{detail.summary.careerLosses}{detail.summary.careerTies > 0 ? `-${detail.summary.careerTies}` : ''}</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Career Win %</span>
+              <span class="stat-value">{formatWinPercentage(detail.summary.careerWinPercentage)}</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Playoff Record</span>
+              <span class="stat-value">{detail.summary.careerPlayoffWins}-{detail.summary.careerPlayoffLosses}</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Championships</span>
+              <span class="stat-value">{detail.summary.championships}</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Runner-Up Finishes</span>
+              <span class="stat-value">{detail.summary.runnerUpFinishes}</span>
+            </div>
+            <div class="stat-card">
+              <span class="stat-label">Seasons Played</span>
+              <span class="stat-value">{detail.summary.seasonsPlayed}</span>
+            </div>
+          </div>
+
+          <div class="section-heading"><h2>Teams by Season</h2></div>
+          {detail.teamsBySeason.length === 0 ? (
+            <p class="empty-state">No season history on record.</p>
+          ) : (
+            <div class="table-scroll" style="margin-bottom: var(--space-6);">
+              <table class="data-table responsive-cards">
+                <thead>
+                  <tr>
+                    <th scope="col">Season</th>
+                    <th scope="col" class="team-cell">Team</th>
+                    <th scope="col">Final Finish</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.teamsBySeason.map((row) => (
+                    <tr>
+                      <td data-label="Season">{row.seasonName}</td>
+                      <td data-label="Team" class="team-cell">
+                        <a class="team-link" href={`/teams/${row.team.slug}`}>
+                          <img class="team-logo-sm" src={row.team.logoUrl} alt="" loading="lazy" />
+                          {row.team.name}
+                        </a>
+                      </td>
+                      <td data-label="Final Finish">{row.finalFinish ?? '-'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div class="section-heading"><h2>Head-to-Head Records</h2></div>
+          {detail.headToHead.length === 0 ? (
+            <p class="empty-state">No completed games against other managers yet.</p>
+          ) : (
+            <div class="table-scroll" style="margin-bottom: var(--space-6);">
+              <table class="data-table responsive-cards" data-sortable>
+                <thead>
+                  <tr>
+                    <th scope="col">Opponent</th>
+                    <th scope="col" class="numeric" data-sort-key="wins" data-sort-type="numeric">W</th>
+                    <th scope="col" class="numeric" data-sort-key="losses" data-sort-type="numeric">L</th>
+                    <th scope="col" class="numeric" data-sort-key="ties" data-sort-type="numeric">T</th>
+                    <th scope="col" class="numeric" data-sort-key="pf" data-sort-type="numeric">PF</th>
+                    <th scope="col" class="numeric" data-sort-key="pa" data-sort-type="numeric">PA</th>
+                    <th scope="col" class="numeric" data-sort-key="diff" data-sort-type="numeric">Diff</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {detail.headToHead.map((record) => (
+                    <tr>
+                      <td data-label="Opponent">{record.opponentName}</td>
+                      <td data-label="Wins" class="numeric">{record.wins}</td>
+                      <td data-label="Losses" class="numeric">{record.losses}</td>
+                      <td data-label="Ties" class="numeric">{record.ties}</td>
+                      <td data-label="Points For" class="numeric">{record.pointsFor}</td>
+                      <td data-label="Points Against" class="numeric">{record.pointsAgainst}</td>
+                      <td data-label="Differential" class="numeric" data-sort-value={record.pointDifferential}>{formatSignedNumber(record.pointDifferential)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          <div class="section-heading"><h2>Recent Games</h2></div>
+          {detail.recentGames.length === 0 ? (
+            <p class="empty-state">No completed games on record.</p>
+          ) : (
+            <div class="grid grid-2">
+              {detail.recentGames.map((game) => <GameCard game={game} />)}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  </Layout>
+)}

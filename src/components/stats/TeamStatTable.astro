@@ -1,0 +1,61 @@
+---
+import { formatAverage, formatSignedNumber } from '../../lib/formatting';
+import type { TeamLeaderboardEntry } from '../../lib/types';
+
+interface Props {
+  rows: TeamLeaderboardEntry[];
+}
+
+const { rows } = Astro.props;
+---
+{rows.length === 0 ? (
+  <p class="empty-state">No team statistics have been entered for this season yet.</p>
+) : (
+  <div class="table-scroll">
+    <table class="data-table responsive-cards" data-sortable>
+      <thead>
+        <tr>
+          <th scope="col" data-sort-key="rank" data-sort-type="numeric" aria-sort="ascending">Rank</th>
+          <th scope="col" class="team-cell">Team</th>
+          <th scope="col">Manager</th>
+          <th scope="col" class="numeric" data-sort-key="games" data-sort-type="numeric">Games</th>
+          <th scope="col" class="numeric" data-sort-key="ppg" data-sort-type="numeric">PPG</th>
+          <th scope="col" class="numeric" data-sort-key="papg" data-sort-type="numeric">PAPG</th>
+          <th scope="col" class="numeric" data-sort-key="diff" data-sort-type="numeric">Diff/G</th>
+          <th scope="col" class="numeric" data-sort-key="oypg" data-sort-type="numeric">Off YPG</th>
+          <th scope="col" class="numeric" data-sort-key="pypg" data-sort-type="numeric">Pass YPG</th>
+          <th scope="col" class="numeric" data-sort-key="rypg" data-sort-type="numeric">Rush YPG</th>
+          <th scope="col" class="numeric" data-sort-key="topg" data-sort-type="numeric">TO/G</th>
+          <th scope="col" class="numeric" data-sort-key="tapg" data-sort-type="numeric">TA/G</th>
+          <th scope="col" class="numeric" data-sort-key="todiff" data-sort-type="numeric">TO Diff</th>
+          <th scope="col" class="numeric" data-sort-key="sackspg" data-sort-type="numeric">Sacks/G</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.map((row) => (
+          <tr class:list={{ 'top-three': row.rank <= 3 }}>
+            <td data-label="Rank">{row.rank}</td>
+            <td data-label="Team" class="team-cell">
+              <a class="team-link" href={`/teams/${row.team.slug}`}>
+                <img class="team-logo-sm" src={row.team.logoUrl} alt="" loading="lazy" />
+                {row.team.name}
+              </a>
+            </td>
+            <td data-label="Manager"><a href={`/managers/${row.manager.slug}`}>{row.manager.name}</a></td>
+            <td data-label="Games" class="numeric">{row.games}</td>
+            <td data-label="Points Per Game" class="numeric" data-sort-value={row.pointsPerGame}>{formatAverage(row.pointsPerGame)}</td>
+            <td data-label="Points Allowed Per Game" class="numeric" data-sort-value={row.pointsAllowedPerGame}>{formatAverage(row.pointsAllowedPerGame)}</td>
+            <td data-label="Point Differential Per Game" class="numeric" data-sort-value={row.pointDifferentialPerGame}>{formatSignedNumber(Math.round(row.pointDifferentialPerGame * 10) / 10)}</td>
+            <td data-label="Offensive Yards Per Game" class="numeric" data-sort-value={row.offensiveYardsPerGame}>{formatAverage(row.offensiveYardsPerGame)}</td>
+            <td data-label="Passing Yards Per Game" class="numeric" data-sort-value={row.passingYardsPerGame}>{formatAverage(row.passingYardsPerGame)}</td>
+            <td data-label="Rushing Yards Per Game" class="numeric" data-sort-value={row.rushingYardsPerGame}>{formatAverage(row.rushingYardsPerGame)}</td>
+            <td data-label="Turnovers Per Game" class="numeric" data-sort-value={row.turnoversPerGame}>{formatAverage(row.turnoversPerGame)}</td>
+            <td data-label="Takeaways Per Game" class="numeric" data-sort-value={row.takeawaysPerGame}>{formatAverage(row.takeawaysPerGame)}</td>
+            <td data-label="Turnover Differential" class="numeric" data-sort-value={row.turnoverDifferential}>{formatSignedNumber(row.turnoverDifferential)}</td>
+            <td data-label="Sacks Per Game" class="numeric" data-sort-value={row.sacksPerGame}>{formatAverage(row.sacksPerGame)}</td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+  </div>
+)}
