@@ -1,7 +1,7 @@
 import type { Env } from './env';
 import { isMockMode } from './env';
 import { mockData } from './mock';
-import { fetchLeagueDatasetFromAirtable } from './airtableTransform';
+import { fetchLeagueDatasetFromSanity } from './sanityTransform';
 import { getOrFetchWithCache } from './cache';
 import type {
   GameSummary,
@@ -62,7 +62,7 @@ export async function getLeagueDataset(
     const result = await getOrFetchWithCache(
       'league-dataset',
       { ttlSeconds: CACHE_TTL_SECONDS, staleTtlSeconds: STALE_TTL_SECONDS, bypass: opts.bypassCache },
-      () => fetchLeagueDatasetFromAirtable(env)
+      () => fetchLeagueDatasetFromSanity(env)
     );
     return { data: result.data, stale: result.stale };
   } catch (error) {

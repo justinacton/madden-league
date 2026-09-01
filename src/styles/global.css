@@ -480,6 +480,9 @@ table.data-table {
 .game-card-score { font-family: var(--font-display); font-weight: 800; font-size: 1.35rem; font-variant-numeric: tabular-nums; }
 .game-card-team.winner .team-name { color: var(--color-accent-strong); }
 .game-card-footer { display: flex; justify-content: space-between; align-items: center; font-size: 0.85rem; }
+.bye-card { align-items: stretch; }
+.bye-card-body { flex: 1; display: flex; align-items: center; justify-content: center; min-height: 72px; }
+.bye-label { font-family: var(--font-display); font-weight: 800; font-size: 1.15rem; letter-spacing: 0.1em; color: var(--color-text-muted); }
 
 /* ---------------------------------------------------------------------------
    News

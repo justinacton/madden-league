@@ -2,9 +2,11 @@
 import Layout from '../../layouts/Layout.astro';
 import NotFound from '../../components/NotFound.astro';
 import GameCard from '../../components/GameCard.astro';
+import ByeCard from '../../components/ByeCard.astro';
 import { formatSignedNumber, formatWinPercentage } from '../../lib/formatting';
 import { getSiteInfo, getTeamDetail, LeagueDataUnavailableError } from '../../lib/api';
 import { getRuntimeEnv } from '../../lib/envAstro';
+import type { GameSummary } from '../../lib/types';
 
 const { teamSlug } = Astro.params;
 const env = getRuntimeEnv(Astro.locals);
@@ -21,6 +23,24 @@ try {
   unavailable = error instanceof LeagueDataUnavailableError;
 }
 if (!detail && !unavailable) Astro.response.status = 404;
+
+// Fill gaps between regular-season weeks with a "BYE" placeholder — a team
+// missing a week's game everywhere else in the schedule (not just at the
+// end, which just means later weeks aren't played/entered yet) is a bye.
+type ScheduleRow = { kind: 'game'; game: GameSummary } | { kind: 'bye'; week: number };
+const scheduleRows: ScheduleRow[] = [];
+let lastRegularSeasonWeek: number | null = null;
+for (const game of detail?.schedule ?? []) {
+  if (game.gameType === 'Regular Season') {
+    if (lastRegularSeasonWeek !== null) {
+      for (let week = lastRegularSeasonWeek + 1; week < game.week; week++) {
+        scheduleRows.push({ kind: 'bye', week });
+      }
+    }
+    lastRegularSeasonWeek = game.week;
+  }
+  scheduleRows.push({ kind: 'game', game });
+}
 ---
 {!detail && !unavailable ? (
   <Layout title="Team Not Found" description="This team could not be found." noindex>
@@ -86,11 +106,13 @@ if (!detail && !unavailable) Astro.response.status = 404;
           )}
 
           <div class="section-heading"><h2>Schedule &amp; Results</h2></div>
-          {detail.schedule.length === 0 ? (
+          {scheduleRows.length === 0 ? (
             <p class="empty-state">No games have been scheduled for this team.</p>
           ) : (
             <div class="grid grid-2" style="margin-bottom: var(--space-6);">
-              {detail.schedule.map((game) => <GameCard game={game} />)}
+              {scheduleRows.map((row) =>
+                row.kind === 'bye' ? <ByeCard week={row.week} /> : <GameCard game={row.game} />
+              )}
             </div>
           )}
 
