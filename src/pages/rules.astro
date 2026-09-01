@@ -32,7 +32,15 @@ import { leagueSettings, ruleSections } from '../content/rules';
       {ruleSections.map((section) => (
         <div class="panel panel-pad">
           <h3>{section.title}</h3>
-          <p>{section.content}</p>
+          {section.blocks.map((block) =>
+            block.type === 'paragraph' ? (
+              <p>{block.text}</p>
+            ) : block.ordered ? (
+              <ol>{block.items.map((item) => <li>{item}</li>)}</ol>
+            ) : (
+              <ul>{block.items.map((item) => <li>{item}</li>)}</ul>
+            )
+          )}
         </div>
       ))}
     </div>
