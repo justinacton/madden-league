@@ -19,11 +19,14 @@ const statusPillClass: Record<string, string> = {
   Cancelled: 'pill-cancelled',
 };
 ---
-<article class="game-card">
+<article class:list={['game-card', { featured: game.featuredGame }]}>
   <div class="game-card-meta">
     <span>Week {game.week}{game.gameType !== 'Regular Season' ? ` · ${game.gameType}` : ''}</span>
-    <span class={`pill ${statusPillClass[game.status] ?? 'pill-scheduled'}`}>
-      {game.status}{game.overtime ? ' (OT)' : ''}
+    <span class="cluster">
+      {game.featuredGame && <span class="pill pill-featured">★ Featured</span>}
+      <span class={`pill ${statusPillClass[game.status] ?? 'pill-scheduled'}`}>
+        {game.status}{game.overtime ? ' (OT)' : ''}
+      </span>
     </span>
   </div>
 
