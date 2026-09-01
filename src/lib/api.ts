@@ -41,7 +41,9 @@ import {
   type DefenseCategory,
 } from './calculations';
 
-const CACHE_TTL_SECONDS = 5 * 60;
+// Short on purpose — commissioners expect Studio edits to show up quickly.
+// staleTtlSeconds is only a fallback if a live fetch fails, so it can stay long.
+const CACHE_TTL_SECONDS = 45;
 const STALE_TTL_SECONDS = 6 * 60 * 60;
 
 export interface DataOptions {

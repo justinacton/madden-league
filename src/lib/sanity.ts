@@ -19,8 +19,11 @@ export function getSanityClient(env: Env): SanityClient {
     dataset,
     apiVersion: env.SANITY_API_VERSION || '2024-01-01',
     token: env.SANITY_TOKEN,
-    // No SANITY_TOKEN means an unauthenticated read — fine for a public
-    // dataset with published documents only (no drafts).
-    useCdn: !env.SANITY_TOKEN,
+    // Always read Sanity's live API, not the CDN mirror (apicdn.sanity.io) —
+    // the CDN is eventually-consistent and can lag edits by up to a couple
+    // minutes, which stacks with our own edge cache below. This is a small,
+    // low-traffic site, so the extra latency/cost of skipping the CDN is
+    // negligible next to always showing current data.
+    useCdn: false,
   });
 }
