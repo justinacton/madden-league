@@ -1,7 +1,7 @@
 import type { Env } from './env';
 import { isMockMode } from './env';
 import { mockData } from './mock';
-import { fetchLeagueDatasetFromAirtable } from './airtableTransform';
+import { fetchLeagueDatasetFromSanity } from './sanityTransform';
 import { getOrFetchWithCache } from './cache';
 import type {
   GameSummary,
@@ -41,7 +41,9 @@ import {
   type DefenseCategory,
 } from './calculations';
 
-const CACHE_TTL_SECONDS = 5 * 60;
+// Short on purpose — commissioners expect Studio edits to show up quickly.
+// staleTtlSeconds is only a fallback if a live fetch fails, so it can stay long.
+const CACHE_TTL_SECONDS = 45;
 const STALE_TTL_SECONDS = 6 * 60 * 60;
 
 export interface DataOptions {
@@ -62,7 +64,7 @@ export async function getLeagueDataset(
     const result = await getOrFetchWithCache(
       'league-dataset',
       { ttlSeconds: CACHE_TTL_SECONDS, staleTtlSeconds: STALE_TTL_SECONDS, bypass: opts.bypassCache },
-      () => fetchLeagueDatasetFromAirtable(env)
+      () => fetchLeagueDatasetFromSanity(env)
     );
     return { data: result.data, stale: result.stale };
   } catch (error) {

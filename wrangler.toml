@@ -5,10 +5,10 @@ pages_build_output_dir = "dist"
 
 # These vars apply to `wrangler pages dev` (npm run preview) and to production
 # Cloudflare Pages — NOT to `npm run dev` (astro dev), which reads .env instead.
-# Non-secret vars can live here; secrets (AIRTABLE_TOKEN) must be set with
-# `wrangler pages secret put AIRTABLE_TOKEN` for production, or in `.dev.vars`
-# (gitignored) for `wrangler pages dev`.
+# Sanity reads are unauthenticated (public dataset, published documents only),
+# so no secret/token is needed here for the site itself — only the studio/
+# import scripts need a write-access SANITY_TOKEN, kept in studio/.env.
 [vars]
 USE_MOCK_DATA = "false"
-AIRTABLE_BASE_ID = "appZSCWfIrrSkQABA"
-AIRTABLE_API_URL = "https://api.airtable.com/v0"
+SANITY_PROJECT_ID = "khksb588"
+SANITY_DATASET = "production"

@@ -1,0 +1,15 @@
+---
+interface Props {
+  week: number;
+}
+
+const { week } = Astro.props;
+---
+<article class="game-card bye-card">
+  <div class="game-card-meta">
+    <span>Week {week}</span>
+  </div>
+  <div class="bye-card-body">
+    <span class="bye-label">BYE</span>
+  </div>
+</article>
