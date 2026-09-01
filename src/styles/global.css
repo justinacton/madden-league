@@ -473,6 +473,14 @@ table.data-table {
   letter-spacing: 0.03em;
 }
 .game-card-matchup { display: flex; flex-direction: column; gap: var(--space-2); }
+.game-card-at {
+  align-self: center;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--color-text-muted);
+}
 .game-card-team { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); }
 .game-card-team-info { display: flex; align-items: center; gap: var(--space-3); min-width: 0; }
 .game-card-team-info .names { min-width: 0; }

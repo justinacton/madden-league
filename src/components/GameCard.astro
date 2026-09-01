@@ -41,6 +41,7 @@ const statusPillClass: Record<string, string> = {
       </div>
       {isFinal && <span class="game-card-score">{game.awayScore}</span>}
     </div>
+    <div class="game-card-at">at</div>
     <div class:list={['game-card-team', { winner: homeWon }]}>
       <div class="game-card-team-info">
         <img class="team-logo" src={game.homeTeam.logoUrl} alt="" loading="lazy" />
